@@ -6,12 +6,12 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from backend.models import db
 from datetime import datetime
 
-# DB Path setup
+# Path setup
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 _DB_PATH = os.path.join(_BASE_DIR, 'hostel.db')
 
 def create_app():
-    # Frontend path
+    # Frontend Path
     _FRONTEND_DIST = os.path.abspath(os.path.join(_BASE_DIR, 'frontend', 'dist'))
     app = Flask(__name__, static_folder=_FRONTEND_DIST, static_url_path='/')
     
@@ -19,19 +19,17 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = 'dev_key'
     
-    # Production Security
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     
-    # Proxy Fix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-    # CORS
+    # CORS settings
     CORS(app, resources={r"/api/*": {"origins": "https://hostel.coolsun.co.uk"}})
 
     db.init_app(app)
 
-    # Database safety check
+    # Database creation logic
     with app.app_context():
         try:
             db.create_all()
