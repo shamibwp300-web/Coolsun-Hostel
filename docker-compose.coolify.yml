@@ -1,0 +1,36 @@
+version: '3.8'
+
+# ====================================================
+# COOLIFY DEPLOYMENT FILE - DO NOT USE FOR LOCAL DEV
+# Use: docker-compose.yml for local development
+# ====================================================
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    expose:
+      - "5000"
+    volumes:
+      - hostel_sqlite_data:/app/instance
+      - hostel_uploads:/app/uploads
+    environment:
+      - FLASK_ENV=production
+    restart: always
+
+volumes:
+  hostel_sqlite_data:
+    name: hostel_sqlite_data
+  hostel_uploads:
+    name: hostel_uploads

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose:
+      - "5000"
+    volumes:
+      - hostel_sqlite_data:/app/instance
+      - hostel_uploads:/app/uploads
+    environment:
+      - FLASK_ENV=production
+    restart: always
+
+volumes:
+  hostel_sqlite_data:
+    name: hostel_sqlite_data
+  hostel_uploads:
+    name: hostel_uploads
