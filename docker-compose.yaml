@@ -10,6 +10,11 @@ services:
     depends_on:
       - backend
     restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.coolsun.rule=Host(`hostel.coolsun.co.uk`)
+      - traefik.http.routers.coolsun.entrypoints=web
+      - traefik.http.services.coolsun.loadbalancer.server.port=80
 
   backend:
     build:
