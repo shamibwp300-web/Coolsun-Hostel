@@ -16,6 +16,8 @@ services:
       - traefik.http.routers.coolsun.entrypoints=web,websecure
       - traefik.http.routers.coolsun.tls=true
       - traefik.http.services.coolsun.loadbalancer.server.port=80
+    networks:
+      - coolify
 
   backend:
     build:
@@ -29,7 +31,13 @@ services:
     environment:
       - FLASK_ENV=production
     restart: always
+    networks:
+      - coolify
 
 volumes:
   hostel_sqlite_data:
   hostel_uploads:
+
+networks:
+  coolify:
+    external: true
