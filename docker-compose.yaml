@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   frontend:
@@ -13,7 +13,8 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.coolsun.rule=Host(`hostel.coolsun.co.uk`)
-      - traefik.http.routers.coolsun.entrypoints=web
+      - traefik.http.routers.coolsun.entrypoints=web,websecure
+      - traefik.http.routers.coolsun.tls=true
       - traefik.http.services.coolsun.loadbalancer.server.port=80
 
   backend:
@@ -31,6 +32,4 @@ services:
 
 volumes:
   hostel_sqlite_data:
-    name: hostel_sqlite_data
   hostel_uploads:
-    name: hostel_uploads
