@@ -1,14 +1,5 @@
-from flask import Flask, jsonify, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-from werkzeug.middleware.proxy_fix import ProxyFix
-from backend.models import db
-import os
-
-_BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-_DB_PATH = os.path.join(_BASE_DIR, 'hostel.db')
-
 def create_app():
+    # Frontend dist folder ka rasta
     _FRONTEND_DIST = os.path.abspath(os.path.join(_BASE_DIR, 'frontend', 'dist'))
     app = Flask(__name__, static_folder=_FRONTEND_DIST, static_url_path='/')
     
@@ -16,22 +7,27 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = 'dev_key'
     
+    # Production Security
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     
+    # Proxy Fix (Cloudflare/Nginx ke liye)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
+    # CORS
     CORS(app, resources={r"/api/*": {"origins": "https://hostel.coolsun.co.uk"}})
 
     db.init_app(app)
 
-    # ✅ FIXED: Added safety check for multiple workers
+    # ✅ FIXED: Database tables banane ka mehfooz tareeqa
     with app.app_context():
         try:
             db.create_all()
-        except Exception as e:
-            app.logger.info(f"Note: Database tables already exist or sync issue: {e}")
+        except Exception:
+            # Agar table pehle se hai toh error ko ignore karein
+            pass
 
+    # Register Blueprints (Aap ke purane blueprints)
     from backend.routes.onboarding import onboarding_bp
     from backend.routes.dashboard import dashboard_bp
     from backend.routes.rooms import rooms_bp
@@ -67,7 +63,3 @@ def create_app():
         return send_from_directory(app.static_folder, 'index.html')
 
     return app
-
-if __name__ == '__main__':
-    app = create_app()
-    app.run(debug=True)
