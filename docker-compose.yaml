@@ -1,43 +1,29 @@
-version: "3.8"
+version: '3.8'
 
 services:
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    expose:
-      - "80"
+    ports:
+      - "80:80"
     depends_on:
       - backend
     restart: always
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.coolsun.rule=Host(`hostel.coolsun.co.uk`)
-      - traefik.http.routers.coolsun.entrypoints=web,websecure
-      - traefik.http.routers.coolsun.tls=true
-      - traefik.http.services.coolsun.loadbalancer.server.port=80
-    networks:
-      - coolify
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    expose:
-      - "5000"
+    ports:
+      - "5000:5000"
     volumes:
       - hostel_sqlite_data:/app/instance
       - hostel_uploads:/app/uploads
     environment:
       - FLASK_ENV=production
     restart: always
-    networks:
-      - coolify
 
 volumes:
   hostel_sqlite_data:
   hostel_uploads:
-
-networks:
-  coolify:
-    external: true
