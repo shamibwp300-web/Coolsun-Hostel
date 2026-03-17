@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify
+import os
+from flask import Blueprint, request, jsonify, current_app
+from werkzeug.utils import secure_filename
 from backend.models import db, Tenant, Ledger, Expense
 from datetime import datetime
 
@@ -88,13 +90,43 @@ def pay_dues():
 @finance_bp.route('/finance/expenses', methods=['GET', 'POST'])
 def handle_expenses():
     if request.method == 'POST':
-        data = request.json
-        e = Expense(
-            category=data.get('category', 'Operational'),
-            amount=data.get('amount'),
-            description=data.get('description'),
-            sub_note=data.get('sub_note')
-        )
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = request.form
+            
+            # Handle proof photo upload
+            file = request.files.get('file')
+            receipt_url = None
+            if file and file.filename:
+                upload_folder = os.path.join(current_app.root_path, 'uploads', 'expenses')
+                os.makedirs(upload_folder, exist_ok=True)
+                filename = secure_filename(file.filename)
+                # Ensure unique filename
+                timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+                filename = f"{timestamp}_{filename}"
+                file_path = os.path.join(upload_folder, filename)
+                file.save(file_path)
+                receipt_url = f'/uploads/expenses/{filename}'
+                
+            e = Expense(
+                category=data.get('category', 'Operational'),
+                amount=float(data.get('amount', 0)),
+                description=data.get('description'),
+                sub_note=data.get('sub_note'),
+                maintenance_id=data.get('maintenance_id') if data.get('maintenance_id') else None,
+                paid_from_cash_drawer=str(data.get('paid_from_cash_drawer', 'true')).lower() == 'true',
+                receipt_url=receipt_url
+            )
+        else:
+            data = request.json
+            e = Expense(
+                category=data.get('category', 'Operational'),
+                amount=data.get('amount'),
+                description=data.get('description'),
+                sub_note=data.get('sub_note'),
+                maintenance_id=data.get('maintenance_id'),
+                paid_from_cash_drawer=data.get('paid_from_cash_drawer', True)
+            )
+
         if data.get('type') == 'Personal':
             e.category = 'Owner Personal'
         
