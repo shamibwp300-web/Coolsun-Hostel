@@ -20,4 +20,13 @@ services:
       dockerfile: Dockerfile
     expose:
       - "5000"
+    volumes:
+      - hostel_sqlite_data:/app/backend/instance
+      - hostel_uploads:/app/uploads
     restart: always
+
+volumes:
+  hostel_sqlite_data:
+    name: hostel_sqlite_data
+  hostel_uploads:
+    name: hostel_uploads

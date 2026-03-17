@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt gunicorn
 COPY backend/ ./backend/
 
 # Ensure volume mount points exist
-RUN mkdir -p /app/instance /app/uploads
-RUN chmod -R 777 /app/instance /app/uploads
+RUN mkdir -p /app/backend/instance /app/uploads
+RUN chmod -R 777 /app/backend/instance /app/uploads
 
 EXPOSE 5000
 

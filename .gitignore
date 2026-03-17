@@ -19,8 +19,10 @@ ENV/
 
 # Databases (CRITICAL: Do not push local databases to production)
 *.db
+*.db.bak
 *.sqlite3
 backend/hostel.db
+backend/instance/
 hostel.db
 
 # Environment variables

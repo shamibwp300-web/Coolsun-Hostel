@@ -23,7 +23,7 @@ services:
     expose:
       - "5000"
     volumes:
-      - hostel_sqlite_data:/app/instance
+      - hostel_sqlite_data:/app/backend/instance
       - hostel_uploads:/app/uploads
     environment:
       - FLASK_ENV=production

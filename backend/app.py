@@ -8,7 +8,11 @@ from datetime import datetime
 
 # Path setup
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-_DB_PATH = os.path.join(_BASE_DIR, 'hostel.db')
+# DB is stored in the 'instance' folder, which is mounted as a persistent
+# Docker volume in production. This prevents data loss on container restarts.
+_INSTANCE_DIR = os.path.join(_BASE_DIR, 'backend', 'instance')
+os.makedirs(_INSTANCE_DIR, exist_ok=True)
+_DB_PATH = os.path.join(_INSTANCE_DIR, 'hostel.db')
 
 def create_app():
     # Frontend Path
@@ -25,7 +29,11 @@ def create_app():
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
     # CORS settings
-    CORS(app, resources={r"/api/*": {"origins": "https://hostel.coolsun.co.uk"}})
+    CORS(app, resources={r"/api/*": {"origins": [
+        "https://hostel.coolsun.co.uk",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ]}})
 
     db.init_app(app)
 
