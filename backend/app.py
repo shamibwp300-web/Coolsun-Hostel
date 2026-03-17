@@ -71,6 +71,11 @@ def create_app():
     def ping():
         return "pong", 200
 
+    @app.route('/api/uploads/<path:filename>')
+    def serve_uploads(filename):
+        uploads_dir = os.path.join(app.instance_path, 'uploads')
+        return send_from_directory(uploads_dir, filename)
+
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def catch_all(path):

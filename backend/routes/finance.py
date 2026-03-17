@@ -97,7 +97,7 @@ def handle_expenses():
             file = request.files.get('file')
             receipt_url = None
             if file and file.filename:
-                upload_folder = os.path.join(current_app.root_path, 'uploads', 'expenses')
+                upload_folder = os.path.join(current_app.instance_path, 'uploads', 'expenses')
                 os.makedirs(upload_folder, exist_ok=True)
                 filename = secure_filename(file.filename)
                 # Ensure unique filename
@@ -105,7 +105,7 @@ def handle_expenses():
                 filename = f"{timestamp}_{filename}"
                 file_path = os.path.join(upload_folder, filename)
                 file.save(file_path)
-                receipt_url = f'/uploads/expenses/{filename}'
+                receipt_url = f'/api/uploads/expenses/{filename}'
                 
             e = Expense(
                 category=data.get('category', 'Operational'),
