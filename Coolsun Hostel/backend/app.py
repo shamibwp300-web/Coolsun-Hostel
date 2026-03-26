@@ -60,7 +60,7 @@ def create_app():
     from backend.routes.moveout import moveout_bp
     from backend.routes.finance import finance_bp
     from backend.routes.admin import admin_bp
-
+    from backend.routes.auth import auth_bp
 
     app.register_blueprint(onboarding_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api')
@@ -73,6 +73,7 @@ def create_app():
     app.register_blueprint(moveout_bp, url_prefix='/api')
     app.register_blueprint(finance_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api')
+    app.register_blueprint(auth_bp, url_prefix='/api')
 
     # ─── Debug Routes ──────────────────────────────────────────────────────────
     @app.route('/api/debug/ping')
