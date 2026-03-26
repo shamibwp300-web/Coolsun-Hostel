@@ -70,7 +70,8 @@ def get_dashboard_summary():
     try:
         tenants = Tenant.query.filter_by(deleted_at=None).all()
         for t in tenants:
-            status = t.get_compliance_status()
+            comp = t.get_compliance_status()
+            status = comp.get('status')
             if status in compliance_counts:
                 compliance_counts[status] += 1
     except Exception as e:

@@ -282,11 +282,13 @@ const Tenants = () => {
                                             )}
                                         </div>
 
-                                        {(tenant.rent_balance > 0 || tenant.security_balance > 0 || tenant.utility_balance > 0) && (
+                                        {(tenant.rent_balance > 0 || tenant.security_balance > 0 || tenant.utility_balance > 0 || tenant.fine_balance > 0 || tenant.opening_balance > 0) && (
                                             <div className="flex space-x-1 mt-1">
                                                 {tenant.rent_balance > 0 && <span className="text-[9px] px-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded" title="Rent">R</span>}
                                                 {tenant.security_balance > 0 && <span className="text-[9px] px-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded" title="Security">S</span>}
                                                 {tenant.utility_balance > 0 && <span className="text-[9px] px-1 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded" title="Utility">U</span>}
+                                                {tenant.fine_balance > 0 && <span className="text-[9px] px-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded" title="Fine">F</span>}
+                                                {tenant.opening_balance > 0 && <span className="text-[9px] px-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded" title="Opening Balance">O</span>}
                                             </div>
                                         )}
 
@@ -315,6 +317,18 @@ const Tenants = () => {
                                                     <div className="flex justify-between text-[11px]">
                                                         <span className="text-purple-400">Utility Due:</span>
                                                         <span className="text-white font-medium">Rs. {tenant.utility_balance.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.fine_balance > 0 && (
+                                                    <div className="flex justify-between text-[11px]">
+                                                        <span className="text-red-400">Fines Due:</span>
+                                                        <span className="text-white font-medium">Rs. {tenant.fine_balance.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.opening_balance > 0 && (
+                                                    <div className="flex justify-between text-[11px]">
+                                                        <span className="text-orange-400">Opening Bal Due:</span>
+                                                        <span className="text-white font-medium">Rs. {tenant.opening_balance.toLocaleString()}</span>
                                                     </div>
                                                 )}
                                                 <div className="pt-1.5 border-t border-white/5 mt-1 flex justify-between text-xs font-bold">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, User } from 'lucide-react';
+import { Lock, User, Eye, EyeOff } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
 const Login = () => {
@@ -8,6 +8,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState('admin@coolsun.pk');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
   const handleLogin = async (e) => {
@@ -28,7 +29,9 @@ const Login = () => {
         body: JSON.stringify({ username, password })
       });
       
+      console.log('Login response status:', res.status);
       const data = await res.json();
+      console.log('Login response data:', data);
       
       if (res.ok) {
         localStorage.setItem('isAuthenticated', 'true');
@@ -114,12 +117,19 @@ const Login = () => {
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/30 transition-colors group-focus-within:text-blue-400" />
                 <input 
-                  type="password" 
+                  type={showPassword ? "text" : "password"} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-12 w-full rounded-xl border border-white/10 bg-black/20 pl-12 pr-4 text-white placeholder-white/20 transition-all focus:border-blue-500/50 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                  className="h-12 w-full rounded-xl border border-white/10 bg-black/20 pl-12 pr-12 text-white placeholder-white/20 transition-all focus:border-blue-500/50 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
               <div className="flex justify-end mt-2">
                 <Link to="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">

@@ -36,45 +36,33 @@ def get_tenants():
         # But wait! The prompt explicitly said:
         # "Fix Pending Balance math: (Current Rent + Security Due) - (Rent Paid + Security Paid)."
         
-        # Let's calculate exactly that.
-        total_rent_due = 0
-        total_rent_paid = 0
-        total_security_due = 0
-        total_security_paid = 0
-        total_utility_due = 0
-        total_utility_paid = 0
+        # Initial trackers for all types
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
 
         for ledger in t.transactions:
             if ledger.deleted_at is None:
                 amt = float(ledger.amount)
-                if ledger.type in ['RENT', 'PRIVATE_RENT']:
-                    if ledger.status == 'PAID':
-                        total_rent_paid += amt
-                        total_rent_due += amt # It was due, and they paid it
-                    else:
-                        total_rent_due += amt # It is due, but not paid
-                elif ledger.type == 'DEPOSIT':
-                    if ledger.status == 'PAID':
-                        total_security_paid += amt
-                        total_security_due += amt
-                    else:
-                        total_security_due += amt
-                elif ledger.type == 'UTILITY':
-                    if ledger.status == 'PAID':
-                        total_utility_paid += amt
-                        total_utility_due += amt
-                    else:
-                        total_utility_due += amt
+                ltype = ledger.type
+                print(f"DEBUG: Tenant {t.name}, Ledger Type: {ltype}, Amount: {amt}, Status: {ledger.status}")
+                if ltype not in due_by_type:
+                    continue
+                    
+                if ledger.status == 'PAID':
+                    paid_by_type[ltype] += amt
+                    due_by_type[ltype] += amt
+                else:
+                    due_by_type[ltype] += amt
 
-        # The *actual* pending balance is Due - Paid
-        rent_balance = max(0, total_rent_due - total_rent_paid)
-        security_balance = max(0, total_security_due - total_security_paid)
-        utility_balance = max(0, total_utility_due - total_utility_paid)
+        # Breakdown for frontend
+        rent_balance = max(0, (due_by_type['RENT'] + due_by_type['PRIVATE_RENT']) - (paid_by_type['RENT'] + paid_by_type['PRIVATE_RENT']))
+        security_balance = max(0, due_by_type['DEPOSIT'] - paid_by_type['DEPOSIT'])
+        utility_balance = max(0, due_by_type['UTILITY'] - paid_by_type['UTILITY'])
+        fine_balance = max(0, due_by_type['FINE'] - paid_by_type['FINE'])
+        opening_balance_pending = max(0, due_by_type['OPENING_BALANCE'] - paid_by_type['OPENING_BALANCE'])
         
-        # Total paid includes all PAID types
-        total_paid = sum(float(l.amount) for l in t.transactions if l.status == 'PAID' and l.deleted_at is None)
-
-        total_pending_balance = rent_balance + security_balance + utility_balance
+        total_paid = sum(paid_by_type.values())
+        total_pending_balance = rent_balance + security_balance + utility_balance + fine_balance + opening_balance_pending
         status = 'Active'
         if total_pending_balance > 0:
             status = 'Late'
@@ -92,6 +80,8 @@ def get_tenants():
             "rent_balance": rent_balance,
             "security_balance": security_balance,
             "utility_balance": utility_balance,
+            "fine_balance": fine_balance,
+            "opening_balance": opening_balance_pending,
             "total_paid": total_paid,
             "phone": t.phone,
             "internet_opt_in": t.internet_opt_in,
