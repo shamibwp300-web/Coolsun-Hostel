@@ -19,6 +19,13 @@ const Settings = () => {
     const [resetting, setResetting] = useState(false);
     const [includeStructure, setIncludeStructure] = useState(false);
     const [saveStatus, setSaveStatus] = useState(null); // 'saving' | 'success' | null
+    const [passwordForm, setPasswordForm] = useState({
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+    });
+    const [passwordStatus, setPasswordStatus] = useState(null); // 'changing' | 'success' | 'error'
+    const [passwordError, setPasswordError] = useState('');
 
 
     const fetchFines = async () => {
@@ -97,6 +104,31 @@ const Settings = () => {
             setSaveStatus('success');
             setTimeout(() => setSaveStatus(null), 3000);
         }, 1000);
+    };
+
+    const handlePasswordChange = async () => {
+        if (!passwordForm.current_password || !passwordForm.new_password || !passwordForm.confirm_password) {
+            setPasswordError("All fields are required");
+            setPasswordStatus('error');
+            return;
+        }
+        if (passwordForm.new_password !== passwordForm.confirm_password) {
+            setPasswordError("Passwords do not match");
+            setPasswordStatus('error');
+            return;
+        }
+
+        setPasswordStatus('changing');
+        setPasswordError('');
+        try {
+            const r = await axios.post(`${API}/settings/change-password`, passwordForm);
+            setPasswordStatus('success');
+            setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+            setTimeout(() => setPasswordStatus(null), 5000);
+        } catch (e) {
+            setPasswordStatus('error');
+            setPasswordError(e.response?.data?.error || 'Password change failed');
+        }
     };
 
     return (
@@ -273,6 +305,63 @@ const Settings = () => {
                             <input type="checkbox" defaultChecked className="h-5 w-5 accent-blue-500 rounded" />
                             <span className="text-sm text-white/70">Auto-send Rent Reminders on 5th of every month</span>
                         </div>
+                    </div>
+                </div>
+
+                {/* Security Section (NEW) */}
+                <div className="glass-panel p-8 rounded-xl space-y-6">
+                    <h3 className="text-xl font-bold text-white flex items-center">
+                        <Shield className="mr-3 text-green-400" /> Security & Account
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wider text-white/40">Current Password</label>
+                            <input
+                                type="password"
+                                value={passwordForm.current_password}
+                                onChange={e => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                                className="glass-input h-12 w-full px-4 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wider text-white/40">New Password</label>
+                            <input
+                                type="password"
+                                value={passwordForm.new_password}
+                                onChange={e => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                                className="glass-input h-12 w-full px-4 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wider text-white/40">Confirm New Password</label>
+                            <input
+                                type="password"
+                                value={passwordForm.confirm_password}
+                                onChange={e => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+                                className="glass-input h-12 w-full px-4 rounded-xl"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={handlePasswordChange}
+                            disabled={passwordStatus === 'changing'}
+                            className="px-6 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-medium text-sm transition-all disabled:bg-green-800"
+                        >
+                            {passwordStatus === 'changing' ? 'Updating...' : 'Update Password'}
+                        </button>
+
+                        {passwordStatus === 'success' && (
+                            <span className="text-green-400 text-xs font-bold flex items-center gap-1">
+                                <Check size={14} /> Password Updated!
+                            </span>
+                        )}
+                        {passwordStatus === 'error' && (
+                            <span className="text-red-400 text-xs font-bold flex items-center gap-1">
+                                <AlertTriangle size={14} /> {passwordError}
+                            </span>
+                        )}
                     </div>
                 </div>
 
