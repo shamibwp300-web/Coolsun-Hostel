@@ -79,3 +79,51 @@ def fix_room_floors():
             room.floor = correct
     db.session.commit()
     return jsonify({"fixed": fixed, "count": len(fixed)}), 200
+
+@admin_bp.route('/migrate', methods=['GET', 'POST'])
+def force_migrate_schema():
+    """
+    Safely apply missing schema columns without locking the entire boot sequence.
+    Can be called manually after deployment to ensure Supabase is up-to-date.
+    """
+    from sqlalchemy import text
+    queries = [
+        "ALTER TABLE floors ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_tenant_id INTEGER",
+        "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_rent_amount NUMERIC(10, 2)",
+        "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_security_deposit NUMERIC(10, 2)",
+        "ALTER TABLE floors ADD COLUMN IF NOT EXISTS max_bulk_capacity INTEGER DEFAULT 30",
+        "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS floor_id INTEGER",
+        "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS base_rent NUMERIC(10, 2)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS parent_tenant_id INTEGER",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS internet_opt_in BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenancy_type VARCHAR(50)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS emergency_contact VARCHAR(50)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_partial_payment BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS compliance_alert BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS bed_label VARCHAR(20)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS father_name VARCHAR(100)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS permanent_address VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_station VARCHAR(100)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_front_url VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_back_url VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_url VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_submitted TIMESTAMP",
+    ]
+    results = []
+    with db.engine.connect() as conn:
+        for q in queries:
+            try:
+                conn.execute(text(q))
+                conn.commit()
+                results.append({"query": q.split('ADD COLUMN IF NOT EXISTS ')[-1], "status": "SUCCESS"})
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except:
+                    pass
+                results.append({"query": q.split('ADD COLUMN IF NOT EXISTS ')[-1], "status": "SKIPPED/EXISTS"})
+                
+    return jsonify({"message": "Live Schema Sync Completed", "details": results}), 200
+
