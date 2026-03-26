@@ -1,5 +1,9 @@
 FROM python:3.9-slim
 
+# Add a build-time ARG to trace the build version if needed
+ARG BUILD_VERSION=1.0.0
+ENV BUILD_VERSION=$BUILD_VERSION
+
 WORKDIR /app
 
 # Install system dependencies

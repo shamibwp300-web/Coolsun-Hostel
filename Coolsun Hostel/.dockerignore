@@ -10,3 +10,9 @@ instance/
 .git/
 .trae/
 backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+uploads/
+backend/uploads/
