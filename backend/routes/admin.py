@@ -80,5 +80,53 @@ def fix_room_floors():
     db.session.commit()
     return jsonify({"fixed": fixed, "count": len(fixed)}), 200
 
-
+@admin_bp.route('/migrate-db-force', methods=['GET', 'POST'])
+def force_migrate_db():
+    from sqlalchemy import text
+    import traceback
+    
+    # Do not use IF NOT EXISTS since older SQLite doesn't support it
+    queries = [
+        "ALTER TABLE floors ADD COLUMN is_bulk_rented BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE floors ADD COLUMN bulk_tenant_id INTEGER",
+        "ALTER TABLE floors ADD COLUMN bulk_rent_amount NUMERIC(10, 2)",
+        "ALTER TABLE floors ADD COLUMN bulk_security_deposit NUMERIC(10, 2)",
+        "ALTER TABLE floors ADD COLUMN max_bulk_capacity INTEGER DEFAULT 30",
+        "ALTER TABLE rooms ADD COLUMN floor_id INTEGER",
+        "ALTER TABLE rooms ADD COLUMN is_bulk_rented BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE rooms ADD COLUMN base_rent NUMERIC(10, 2)",
+        "ALTER TABLE tenants ADD COLUMN parent_tenant_id INTEGER",
+        "ALTER TABLE tenants ADD COLUMN internet_opt_in BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tenants ADD COLUMN tenancy_type VARCHAR(50)",
+        "ALTER TABLE tenants ADD COLUMN emergency_contact VARCHAR(50)",
+        "ALTER TABLE tenants ADD COLUMN is_partial_payment BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tenants ADD COLUMN compliance_alert BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tenants ADD COLUMN bed_label VARCHAR(20)",
+        "ALTER TABLE tenants ADD COLUMN father_name VARCHAR(100)",
+        "ALTER TABLE tenants ADD COLUMN permanent_address VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN police_station VARCHAR(100)",
+        "ALTER TABLE tenants ADD COLUMN id_card_front_url VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN id_card_back_url VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN police_form_url VARCHAR(255)",
+        "ALTER TABLE tenants ADD COLUMN police_form_submitted TIMESTAMP",
+    ]
+    results = []
+    with db.engine.connect() as conn:
+        for q in queries:
+            try:
+                conn.execute(text(q))
+                conn.commit()
+                results.append({"query": q.split('ADD COLUMN ')[-1], "status": "SUCCESS"})
+            except Exception as e:
+                err_msg = str(e)
+                try: conn.rollback()
+                except: pass
+                
+                # If it's just duplicate column, it's fine!
+                if "duplicate column name" in err_msg.lower():
+                    results.append({"query": q.split('ADD COLUMN ')[-1], "status": "ALREADY_EXISTS"})
+                else:
+                    results.append({"query": q.split('ADD COLUMN ')[-1], "status": "ERROR", "error": err_msg})
+                
+    return jsonify({"message": "Live Schema Sync Finished", "details": results}), 200
 
