@@ -44,9 +44,26 @@ def create_app():
 
     db.init_app(app)
 
-    # Auto-create tables on first run
+    # Auto-create tables and Seed default users on startup
     with app.app_context():
         db.create_all()
+        from backend.models import User
+        
+        # 1. Default Admin
+        if not User.query.filter_by(username='admin').first():
+            u = User(username='admin', role='Owner')
+            u.set_password('admin123')
+            db.session.add(u)
+            print("🚀 AUTO-SEED: Admin User (admin/admin123) Created.")
+            
+        # 2. Default Owner
+        if not User.query.filter_by(username='ewardjain@gmail.com').first():
+            o = User(username='ewardjain@gmail.com', role='Owner')
+            o.set_password('Coolsun@23*+')
+            db.session.add(o)
+            print("🚀 AUTO-SEED: Owner User (ewardjain@gmail.com) Created.")
+            
+        db.session.commit()
 
     # Register Blueprints
     from backend.routes.onboarding import onboarding_bp
