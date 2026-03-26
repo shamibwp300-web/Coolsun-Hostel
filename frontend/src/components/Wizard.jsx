@@ -195,6 +195,12 @@ const Wizard = () => {
     return rent >= 0 && security >= 0 && paid >= 0;
   };
 
+  const canProceedStep2 = () => {
+    if (formData.parentTenantId === 'select') return false;
+    if (!formData.name || !formData.phone || !formData.cnic) return false;
+    return true;
+  };
+
   const handleFileSelect = (type, file) => {
     setFormData({
       ...formData,
@@ -251,9 +257,12 @@ const Wizard = () => {
       // Open WhatsApp in new tab
       window.open(waUrl, '_blank');
       
-      // Redirect current tab
-      window.location.href = '/dashboard';
+      // Redirect current tab after a slight delay
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 500);
     } catch (error) {
+      console.error("Onboarding Error:", error);
       alert("Error: " + (error.response?.data?.error || error.message));
     } finally {
       setIsSubmitting(false);
@@ -784,7 +793,7 @@ const Wizard = () => {
         {currentStep < 5 && (
           <button
             onClick={nextStep}
-            disabled={!canProceedBilling()}
+            disabled={!canProceedBilling() || (currentStep === 2 && !canProceedStep2())}
             className="px-8 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/30 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next Step

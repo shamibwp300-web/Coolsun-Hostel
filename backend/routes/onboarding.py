@@ -40,8 +40,13 @@ def create_tenant():
             internet_opt_in = internet_opt_in_str == 'true'
             
             parent_tenant_id = data.get('parent_tenant_id')
-            if parent_tenant_id == 'null' or parent_tenant_id == '':
+            if parent_tenant_id in ['null', '', 'select', None]:
                 parent_tenant_id = None
+            else:
+                try:
+                    parent_tenant_id = int(parent_tenant_id)
+                except ValueError:
+                    parent_tenant_id = None
 
             # 3. Create Tenant
             tenancy_type = data.get('tenancy_type', 'Shared')
