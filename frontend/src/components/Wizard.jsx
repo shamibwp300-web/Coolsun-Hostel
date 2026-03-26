@@ -114,6 +114,27 @@ const Wizard = () => {
   };
 
   const handleRoomSelect = (room) => {
+    if (room.is_bulk_rented) {
+      if (room.active_floor_tenants >= room.max_bulk_capacity) {
+        alert(`This floor is bulk rented and has reached its strict capacity limit of ${room.max_bulk_capacity} tenants.`);
+        return; // strictly block selection
+      }
+      // Zero out rent for sub-tenants since bulk-tenant pays
+      setFormData({ 
+          ...formData, 
+          roomId: room.id, 
+          roomNumber: room.number, 
+          baseRent: 0,
+          roomTotalRent: 0,
+          rent: 0, 
+          tenancyType: 'Shared',
+          parentTenantId: room.bulk_tenant_id ? room.bulk_tenant_id.toString() : '' 
+      });
+      fetchRoomTenants(room.id);
+      nextStep();
+      return;
+    }
+
     // Implement Per-Head Rule: Rent = Base Rent / Capacity
     const perHeadRent = room.capacity > 0 ? Math.round(room.base_rent / room.capacity) : room.base_rent;
     
@@ -297,12 +318,21 @@ const Wizard = () => {
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <h3 className="text-xl font-bold text-white">Room {room.number}</h3>
+                          <h3 className="text-xl font-bold text-white flex items-center">
+                            Room {room.number}
+                            {room.is_bulk_rented && (
+                              <span className="ml-2 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-[10px] rounded-full uppercase tracking-wider border border-purple-500/30" title={`Floor Capacity: ${room.active_floor_tenants}/${room.max_bulk_capacity}`}>
+                                Bulk Rented
+                              </span>
+                            )}
+                          </h3>
                           <span className="text-xs font-medium uppercase tracking-wider text-white/40">{room.type}</span>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold text-blue-400">Rs. {(room.base_rent || 0).toLocaleString()}</p>
-                          <p className="text-xs text-white/40">per head</p>
+                          <p className={`text-lg font-bold ${room.is_bulk_rented ? 'text-purple-400' : 'text-blue-400'}`}>
+                              {room.is_bulk_rented ? 'Rs. 0' : `Rs. ${(room.base_rent || 0).toLocaleString()}`}
+                          </p>
+                          <p className="text-xs text-white/40">{room.is_bulk_rented ? 'Covered by Owner' : 'per head'}</p>
                         </div>
                       </div>
 
@@ -396,9 +426,22 @@ const Wizard = () => {
                 <input
                   type="text"
                   value={formData.cnic}
-                  onChange={(e) => setFormData({ ...formData, cnic: e.target.value })}
+                  onChange={(e) => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    let res = '';
+                    if (val.length > 0) {
+                      res = val.substring(0, 5);
+                      if (val.length > 5) {
+                        res += '-' + val.substring(5, 12);
+                        if (val.length > 12) {
+                          res += '-' + val.substring(12, 13);
+                        }
+                      }
+                    }
+                    setFormData({ ...formData, cnic: res });
+                  }}
                   className="glass-input h-14 w-full px-5 rounded-2xl"
-                  placeholder="42101-XXXXXXX-X"
+                  placeholder="31202-XXXXXXX-X"
                 />
               </div>
               <div>
@@ -418,9 +461,15 @@ const Wizard = () => {
                 <input
                   type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.startsWith('92')) val = val.substring(2);
+                    if (val.startsWith('0')) val = val.substring(1);
+                    const formatted = val ? `+92${val.substring(0, 10)}` : '';
+                    setFormData({ ...formData, phone: formatted });
+                  }}
                   className="glass-input h-14 w-full px-5 rounded-2xl"
-                  placeholder="03XX-XXXXXXX"
+                  placeholder="+923000000000"
                 />
               </div>
               <div>
@@ -428,9 +477,15 @@ const Wizard = () => {
                 <input
                   type="tel"
                   value={formData.emergencyContact}
-                  onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
+                  onChange={(e) => {
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.startsWith('92')) val = val.substring(2);
+                    if (val.startsWith('0')) val = val.substring(1);
+                    const formatted = val ? `+92${val.substring(0, 10)}` : '';
+                    setFormData({ ...formData, emergencyContact: formatted });
+                  }}
                   className="glass-input h-14 w-full px-5 rounded-2xl"
-                  placeholder="Next of Kin Phone"
+                  placeholder="+92..."
                 />
               </div>
             </div>
@@ -485,11 +540,48 @@ const Wizard = () => {
                 <input
                   type="date"
                   value={formData.moveInDate}
-                  onChange={(e) => setFormData({ ...formData, moveInDate: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, moveInDate: e.target.value, dueDay: new Date(e.target.value).getDate() || formData.dueDay })}
                   className="glass-input h-14 w-full px-4 rounded-xl text-white bg-white/5"
                 />
               </div>
             </div>
+
+            {/* Monthly Rent Due Day Selector */}
+            <div className="p-5 rounded-2xl bg-yellow-500/5 border border-yellow-500/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-yellow-400 uppercase tracking-widest">📅 Monthly Rent Due Day</h4>
+                  <p className="text-xs text-white/40 mt-0.5">Which day of the month should this tenant pay rent?</p>
+                </div>
+                <div className="text-2xl font-black text-yellow-400 font-mono">{formData.dueDay}th</div>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {[1,5,10,15,20,25,28].map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, dueDay: d })}
+                    className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${formData.dueDay === d ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
+                  >
+                    {d}
+                  </button>
+                ))}
+                <div className="flex items-center gap-2 ml-2">
+                  <span className="text-white/30 text-xs">Custom:</span>
+                  <input
+                    type="number"
+                    min="1" max="31"
+                    value={formData.dueDay}
+                    onChange={e => setFormData({ ...formData, dueDay: Math.min(31, Math.max(1, parseInt(e.target.value) || 1)) })}
+                    className="w-16 h-10 px-2 rounded-lg bg-black/40 border border-white/10 text-white text-center font-bold text-sm focus:outline-none focus:border-yellow-500/50"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-white/30">
+                Example: Tenant arrived on the {formData.moveInDate ? new Date(formData.moveInDate).getDate() : '—'}th → rent due on {formData.dueDay}th every month going forward.
+              </p>
+            </div>
+
 
             {/* Pro-Rata Intelligence Module */}
             <div className="bg-blue-600/10 border border-blue-500/30 rounded-2xl p-6 space-y-4">

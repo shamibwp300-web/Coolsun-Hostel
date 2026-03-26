@@ -1,50 +1,54 @@
-import os
 from flask import Flask, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from backend.models import db
-from datetime import datetime
+import os
+from dotenv import load_dotenv
 
-# Path setup
+# ─── Load Environment Variables ──────────────────────────────────────────────
+# Ise shuru mein load karna lazmi hai taake Supabase ka link mil sakay
+load_dotenv()
+
+# ─── Absolute DB path (Fallback for SQLite) ──────────────────────────────────
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-# DB is stored in the 'instance' folder, which is mounted as a persistent
-# Docker volume in production. This prevents data loss on container restarts.
-_INSTANCE_DIR = os.path.join(_BASE_DIR, 'backend', 'instance')
-os.makedirs(_INSTANCE_DIR, exist_ok=True)
-_DB_PATH = os.path.join(_INSTANCE_DIR, 'hostel.db')
+_DB_PATH = os.path.join(_BASE_DIR, 'hostel.db')
 
 def create_app():
-    # Frontend Path
+    # Configure Flask to serve static files from the React dist folder securely
     _FRONTEND_DIST = os.path.abspath(os.path.join(_BASE_DIR, 'frontend', 'dist'))
     app = Flask(__name__, static_folder=_FRONTEND_DIST, static_url_path='/')
     
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{_DB_PATH}'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SECRET_KEY'] = 'dev_key'
+    # 🛰️ DATABASE CONFIGURATION
+    # Agar .env mein DATABASE_URL hai (Supabase), toh wo use hoga. 
+    # Agar nahi hai, toh purana hostel.db (SQLite) chale ga.
+    supabase_url = os.getenv('DATABASE_URL')
+    if supabase_url and supabase_url.startswith("postgres://"):
+        # Fix for SQLAlchemy (Postgresql:// instead of postgres://)
+        supabase_url = supabase_url.replace("postgres://", "postgresql://", 1)
     
+    app.config['SQLALCHEMY_DATABASE_URI'] = supabase_url or f'sqlite:///{_DB_PATH}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
+    
+    # ─── Production Security ─────────────────────────────────────────────────────
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     
+    # ─── Cloudflare Proxy Fix ───────────────────────────────────────────────────
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-    # CORS settings
-    CORS(app, resources={r"/api/*": {"origins": [
-        "https://hostel.coolsun.co.uk",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ]}})
+    # ─── CORS ───────────────────────────────────────────────────────────────────
+    # Local development aur Live site dono ke liye allow kiya hai
+    CORS(app, resources={r"/api/*": {"origins": ["https://hostel.coolsun.co.uk", "http://localhost:5173", "http://localhost:3000"]}})
 
     db.init_app(app)
 
-    # Database creation logic
+    # Auto-create tables on first run
     with app.app_context():
-        try:
-            db.create_all()
-        except Exception:
-            pass
+        db.create_all()
 
-    # Blueprints
+    # Register Blueprints
     from backend.routes.onboarding import onboarding_bp
     from backend.routes.dashboard import dashboard_bp
     from backend.routes.rooms import rooms_bp
@@ -55,6 +59,8 @@ def create_app():
     from backend.routes.tasks import tasks_bp
     from backend.routes.moveout import moveout_bp
     from backend.routes.finance import finance_bp
+    from backend.routes.admin import admin_bp
+    from backend.routes.auth import auth_bp
 
     app.register_blueprint(onboarding_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api')
@@ -66,16 +72,16 @@ def create_app():
     app.register_blueprint(tasks_bp, url_prefix='/api')
     app.register_blueprint(moveout_bp, url_prefix='/api')
     app.register_blueprint(finance_bp, url_prefix='/api')
+    app.register_blueprint(admin_bp, url_prefix='/api')
+    app.register_blueprint(auth_bp, url_prefix='/api')
 
+    # ─── Debug Routes ──────────────────────────────────────────────────────────
     @app.route('/api/debug/ping')
     def ping():
-        return "pong", 200
+        db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
+        return jsonify({"status": "Online", "database": db_type}), 200
 
-    @app.route('/api/uploads/<path:filename>')
-    def serve_uploads(filename):
-        uploads_dir = os.path.join(app.instance_path, 'uploads')
-        return send_from_directory(uploads_dir, filename)
-
+    # ─── SPA Fallback Route ─────────────────────────────────────────────────────
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def catch_all(path):
@@ -88,4 +94,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False, port=5000)

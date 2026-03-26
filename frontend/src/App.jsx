@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/dashboard/Dashboard';
 import Wizard from './components/Wizard';
 import Reports from './pages/Reports';
@@ -11,6 +13,7 @@ import Tenants from './pages/Tenants';
 import Finance from './pages/Finance';
 import Settings from './pages/Settings';
 import Rooms from './pages/Rooms';
+import BulkRenting from './pages/BulkRenting';
 import PoliceVerification from './pages/PoliceVerification';
 import Electricity from './pages/Electricity';
 import Tasks from './pages/Tasks';
@@ -29,6 +32,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Protected Routes Wrapped in Layout */}
           <Route
@@ -70,6 +75,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Rooms />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/bulk-rent"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <BulkRenting />
                 </Layout>
               </ProtectedRoute>
             }

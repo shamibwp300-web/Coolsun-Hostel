@@ -142,3 +142,30 @@ def get_audit_logs():
         "pages": logs.pages,
         "current_page": page
     }), 200
+    
+@settings_bp.route('/settings/change-password', methods=['POST'])
+def change_password():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    data = request.json
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+    confirm_password = data.get('confirm_password')
+    
+    if not current_password or not new_password or not confirm_password:
+        return jsonify({"error": "All fields are required"}), 400
+        
+    if new_password != confirm_password:
+        return jsonify({"error": "New passwords do not match"}), 400
+        
+    user = User.query.get(user_id)
+    if not user or not user.check_password(current_password):
+        return jsonify({"error": "Incorrect current password"}), 400
+        
+    user.set_password(new_password)
+    log_action('CHANGE_PASSWORD', 'User', entity_id=user_id, details=f"User {user.username} changed their password")
+    db.session.commit()
+    
+    return jsonify({"message": "Password changed successfully"}), 200

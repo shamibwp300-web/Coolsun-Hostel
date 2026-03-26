@@ -26,7 +26,8 @@ def create_tenant():
             if not room:
                 return jsonify({"error": "Room not found"}), 404
             
-            if room.get_ghost_slots() <= 0:
+            active_tenants = len([t for t in room.tenants if getattr(t, 'deleted_at', None) is None])
+            if (room.capacity - active_tenants) <= 0:
                 return jsonify({"error": "No vacancies in this room"}), 409 # Conflict
 
             # 2. Parse Dates
@@ -63,12 +64,25 @@ def create_tenant():
             db.session.flush() # Get Tenant ID
 
             # 4. Create Billing Profile
-            # base_rent is the monthly recurring amount.
-            # initial_rent is the pro-rated or full first month amount.
-            base_rent = float(data.get('base_rent') or data.get('rent_amount'))
-            due_day = int(data.get('due_day', 1))
-            security_deposit_total = float(data.get('security_deposit') or 0)
+            base_rent = float(data.get('base_rent') or data.get('rent_amount') or 0)
             initial_rent = float(data.get('rent_amount', 0))
+            security_deposit_total = float(data.get('security_deposit') or 0)
+            due_day = int(data.get('due_day', 1))
+
+            # ----- BULK FLOOR RENTING LOGIC -----
+            floor = room.floor_ref
+            if floor and floor.is_bulk_rented:
+                floor_rooms = [r.id for r in floor.rooms if r.deleted_at is None]
+                if floor_rooms:
+                    active_floor_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count()
+                    if active_floor_tenants >= floor.max_bulk_capacity:
+                        return jsonify({"error": f"Floor capacity strictly enforced: max {floor.max_bulk_capacity} tenants allowed."}), 409
+                
+                # The sub-tenant on a bulk rented floor doesn't pay system rent
+                base_rent = 0.0
+                initial_rent = 0.0
+            # ------------------------------------
+            
             
             billing = BillingProfile(
                 tenant_id=tenant.id, 

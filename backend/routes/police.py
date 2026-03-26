@@ -90,8 +90,8 @@ def upload_police_form(tenant_id):
         return jsonify({"error": "Invalid document type"}), 400
         
     if file and allowed_file(file.filename):
-        # Create base upload dir dynamically in instance folder for persistence
-        base_dir = os.path.join(current_app.instance_path, 'uploads', 'documents')
+        # Create base upload dir dynamically in static folder
+        base_dir = os.path.join(current_app.root_path, 'static', UPLOAD_FOLDER)
         os.makedirs(base_dir, exist_ok=True)
         
         # Use a more descriptive filename based on type
@@ -102,8 +102,8 @@ def upload_police_form(tenant_id):
         
         try:
             file.save(file_path)
-            # URL to access from frontend via API proxy
-            file_url = f"/api/uploads/documents/{filename}"
+            # URL to access from frontend
+            file_url = f"/static/{UPLOAD_FOLDER}/{filename}"
             
             # Deactivate previous docs of same type
             old_docs = Document.query.filter_by(tenant_id=tenant_id, type=doc_type, deleted_at=None).all()

@@ -47,20 +47,14 @@ const IssueInbox = ({ issues: propIssues, isLoading: propLoading, onRefresh }) =
             // Update issue status to Resolved
             await axios.put(`/api/maintenance/${selectedIssue.id}`, { status: 'Resolved' });
             
-            // If there's a cost or a photo, create an expense/record
-            if (resolveForm.cost > 0 || resolveForm.proofPhoto) {
-                const formData = new FormData();
-                formData.append('amount', resolveForm.cost || 0);
-                formData.append('category', 'Repairs');
-                formData.append('description', resolveForm.desc);
-                formData.append('paid_from_cash_drawer', resolveForm.isCash);
-                formData.append('maintenance_id', selectedIssue.id);
-                if (resolveForm.proofPhoto) {
-                    formData.append('file', resolveForm.proofPhoto);
-                }
-                
-                await axios.post('/api/finance/expenses', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
+            // If there's a cost, create an expense
+            if (resolveForm.cost > 0) {
+                await axios.post('/api/expenses', {
+                    amount: resolveForm.cost,
+                    category: 'Repairs',
+                    description: resolveForm.desc,
+                    paid_from_cash_drawer: resolveForm.isCash,
+                    maintenance_id: selectedIssue.id
                 });
             }
 

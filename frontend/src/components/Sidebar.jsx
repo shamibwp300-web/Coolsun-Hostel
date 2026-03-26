@@ -14,7 +14,8 @@ import {
   Home,
   UserPlus,
   ListChecks,
-  LogIn
+  LogIn,
+  Building2
 } from 'lucide-react';
 
 const Sidebar = ({ mode = 'desktop' }) => {
@@ -69,6 +70,7 @@ const Sidebar = ({ mode = 'desktop' }) => {
           <NavItem icon={<UserPlus size={18} />} label="New Tenant (Wizard)" to="/wizard" active={location.pathname === '/wizard'} />
           <NavItem icon={<Users size={18} />} label="Tenant Registry" to="/tenants" active={location.pathname === '/tenants'} />
           <NavItem icon={<Home size={18} />} label="Room Inventory" to="/rooms" active={location.pathname === '/rooms'} />
+          <NavItem icon={<Building2 size={18} />} label="Bulk Rental" to="/bulk-rent" active={location.pathname === '/bulk-rent'} />
           <NavItem icon={<Shield size={18} />} label="Police Verification" to="/police" active={location.pathname === '/police'} />
           <NavItem icon={<ListChecks size={18} />} label="Tasks & Staff" to="/tasks" active={location.pathname === '/tasks'} />
         </div>

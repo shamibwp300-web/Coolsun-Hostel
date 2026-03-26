@@ -222,10 +222,10 @@ const Tenants = () => {
                                 <td className="p-6 text-white/50 text-xs font-mono">{tenant.phone}</td>
                                 <td className="p-6">
                                     <div className="flex items-center">
-                                        <div className={`h-2 w-2 rounded-full mr-2 ${tenant.compliance === 'VERIFIED' || tenant.compliance === 'NORMAL' ? 'bg-green-500' :
-                                            tenant.compliance === 'WARNING' ? 'bg-yellow-500' : 'bg-red-500'
+                                        <div className={`h-2 w-2 rounded-full mr-2 ${tenant.compliance?.status === 'VERIFIED' || tenant.compliance?.status === 'NORMAL' ? 'bg-green-500' :
+                                            tenant.compliance?.status === 'WARNING' ? 'bg-yellow-500' : 'bg-red-500'
                                             }`} />
-                                        <span className="text-xs text-white/60">{tenant.compliance}</span>
+                                        <span className="text-xs text-white/60">{tenant.compliance?.status || 'Pending'}</span>
                                     </div>
                                 </td>
                                 <td className="p-6">
@@ -291,7 +291,7 @@ const Tenants = () => {
                                         )}
 
                                         {/* Hover Tooltip Breakdown */}
-                                        <div className="absolute right-0 top-full mt-2 w-48 p-3 bg-black/95 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[999] shadow-2xl backdrop-blur-xl">
+                                        <div className="absolute right-0 bottom-full mb-2 w-48 p-3 bg-black/95 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl backdrop-blur-xl">
                                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2 border-b border-white/5 pb-1">Ledger Summary</h4>
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between text-xs">
