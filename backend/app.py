@@ -44,12 +44,52 @@ def create_app():
 
     db.init_app(app)
 
-    # 1. Ensure tables exist (Wrapped in try for Gunicorn race conditions)
+    # 1. Ensure tables exist AND auto-migrate missing columns
     try:
         with app.app_context():
             db.create_all()
+            
+            # --- Auto Schema Migration (Lock against missing column breaks) ---
+            from sqlalchemy import text
+            queries = [
+                "ALTER TABLE floors ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_tenant_id INTEGER",
+                "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_rent_amount NUMERIC(10, 2)",
+                "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_security_deposit NUMERIC(10, 2)",
+                "ALTER TABLE floors ADD COLUMN IF NOT EXISTS max_bulk_capacity INTEGER DEFAULT 30",
+                "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS floor_id INTEGER",
+                "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS base_rent NUMERIC(10, 2)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS parent_tenant_id INTEGER",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS internet_opt_in BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenancy_type VARCHAR(50)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS emergency_contact VARCHAR(50)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_partial_payment BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS compliance_alert BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS bed_label VARCHAR(20)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS father_name VARCHAR(100)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS permanent_address VARCHAR(255)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_station VARCHAR(100)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_front_url VARCHAR(255)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_back_url VARCHAR(255)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_url VARCHAR(255)",
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_submitted TIMESTAMP",
+            ]
+            with db.engine.connect() as conn:
+                for q in queries:
+                    try:
+                        # SQLite doesn't strictly support IF NOT EXISTS in ALTER TABLE ADD COLUMN in older versions prior to 3.25, 
+                        # but Postgres does. So we still catch the exception.
+                        conn.execute(text(q))
+                        conn.commit()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except:
+                            pass
+            # ------------------------------------------------------------------
     except Exception as e:
-        app.logger.warning(f"Database table sync skipped/failed (likely already exists): {e}")
+        app.logger.warning(f"Database table sync/migration skipped/failed: {e}")
 
     # 2. Auto-seed default users (Independently wrapped)
     try:
