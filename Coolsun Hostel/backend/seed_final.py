@@ -29,7 +29,15 @@ with app.app_context():
         u = User(username='admin', role='Owner')
         u.set_password('admin123')
         db.session.add(u)
-        db.session.commit()
         print("👤 Admin User (admin/admin123) Added.")
+
+    # 4. Check if User ewardjain@gmail.com exists
+    if not User.query.filter_by(username='ewardjain@gmail.com').first():
+        u2 = User(username='ewardjain@gmail.com', role='Owner')
+        u2.set_password('Coolsun@23*+')
+        db.session.add(u2)
+        print("👤 Owner User (ewardjain@gmail.com) Added.")
+
+    db.session.commit()
 
     print("\n✅ MISSION ACCOMPLISHED: Database is now ready for Login!")
