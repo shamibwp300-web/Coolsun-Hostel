@@ -10,3 +10,5 @@ instance/
 .git/
 .trae/
 backups/
+hostel.db*
+.gemini/

@@ -20,4 +20,4 @@ RUN chmod -R 777 /app/instance /app/uploads
 EXPOSE 5000
 
 # Run with gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "backend.app:create_app()"]
+CMD ["gunicorn", "-w", "4", "--timeout", "120", "-b", "0.0.0.0:5000", "backend.app:create_app()"]

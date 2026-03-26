@@ -12,7 +12,7 @@ load_dotenv()
 
 # ─── Absolute DB path (Fallback for SQLite) ──────────────────────────────────
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-_DB_PATH = os.path.join(_BASE_DIR, 'hostel.db')
+_DB_PATH = os.path.join(_BASE_DIR, 'instance', 'hostel.db')
 
 def create_app():
     # Configure Flask to serve static files from the React dist folder securely
