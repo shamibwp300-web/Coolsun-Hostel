@@ -44,9 +44,12 @@ def create_app():
 
     db.init_app(app)
 
-    # Auto-create tables on first run
-    with app.app_context():
-        db.create_all()
+    # Auto-create tables on first run (wrapped in try for Gunicorn race conditions)
+    try:
+        with app.app_context():
+            db.create_all()
+    except Exception as e:
+        app.logger.warning(f"Database initialization skipped/failed: {e}")
 
     # Register Blueprints
     from backend.routes.onboarding import onboarding_bp
