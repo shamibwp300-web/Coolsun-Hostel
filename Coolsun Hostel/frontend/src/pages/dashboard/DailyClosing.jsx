@@ -12,12 +12,12 @@ const DailyClosing = ({ collectedToday = 0 }) => {
     };
 
     return (
-        <div className="glass-card p-6 h-full flex flex-col justify-between bg-gradient-to-br from-white/5 to-blue-900/10">
-            <h3 className="text-sm font-medium uppercase tracking-wider text-white/50 flex items-center">
-                <Wallet size={14} className="mr-2" /> Daily Closing
+        <div className="glass-card p-4 h-full flex flex-col justify-between bg-gradient-to-br from-white/5 to-blue-900/10">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-white/50 flex items-center">
+                <Wallet size={12} className="mr-2" /> Daily Closing
             </h3>
 
-            <div className="space-y-4 my-4">
+            <div className="space-y-3 my-2">
                 <div>
                     <label className="text-xs text-white/40">Opening Balance</label>
                     <input

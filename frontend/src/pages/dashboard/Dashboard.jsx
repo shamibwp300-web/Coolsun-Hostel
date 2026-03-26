@@ -137,7 +137,7 @@ const Dashboard = () => {
           <div className="h-[280px]">
             <RevenueCard data={data?.financials || {}} />
           </div>
-          <div className="h-[240px]">
+          <div className="h-[280px]">
             <DailyClosing collectedToday={data?.financials?.current_collected || 0} />
           </div>
         </div>

@@ -44,35 +44,33 @@ def create_app():
 
     db.init_app(app)
 
-    # Auto-create tables and Seed default users on startup
+    # 1. Ensure tables exist (Wrapped in try for Gunicorn race conditions)
     try:
         with app.app_context():
             db.create_all()
-            
-            # Auto-seed logic (Independently wrapped to avoid race condition failures)
-            from backend.models import User
-            try:
-                # 1. Default Admin
-                if not User.query.filter_by(username='admin').first():
-                    u = User(username='admin', role='Owner')
-                    u.set_password('admin123')
-                    db.session.add(u)
-                    print("🚀 AUTO-SEED: Admin User (admin/admin123) Created.")
-                    
-                # 2. Default Owner
-                if not User.query.filter_by(username='ewardjain@gmail.com').first():
-                    o = User(username='ewardjain@gmail.com', role='Owner')
-                    o.set_password('Coolsun@23*+')
-                    db.session.add(o)
-                    print("🚀 AUTO-SEED: Owner User (ewardjain@gmail.com) Created.")
-                    
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                app.logger.warning(f"Seed failed (likely concurrent startup): {e}")
-
     except Exception as e:
-        app.logger.warning(f"Database initialization skipped/failed: {e}")
+        app.logger.warning(f"Database table sync skipped/failed (likely already exists): {e}")
+
+    # 2. Auto-seed default users (Independently wrapped)
+    try:
+        with app.app_context():
+            from backend.models import User
+            if not User.query.filter_by(username='admin').first():
+                u = User(username='admin', role='Owner')
+                u.set_password('admin123')
+                db.session.add(u)
+                db.session.commit()
+                print("🚀 AUTO-SEED: Admin User (admin/admin123) Created.")
+                
+            if not User.query.filter_by(username='ewardjain@gmail.com').first():
+                o = User(username='ewardjain@gmail.com', role='Owner')
+                o.set_password('Coolsun@23*+')
+                db.session.add(o)
+                db.session.commit()
+                print("🚀 AUTO-SEED: Owner User (ewardjain@gmail.com) Created.")
+    except Exception as e:
+        # We don't rollback here because if it fails due to a lock, another worker might have done it
+        app.logger.warning(f"Auto-seed skipped/failed (likely concurrent startup): {e}")
 
     # Register Blueprints
     from backend.routes.onboarding import onboarding_bp
