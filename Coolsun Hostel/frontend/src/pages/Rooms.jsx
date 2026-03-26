@@ -8,8 +8,9 @@ const Rooms = () => {
     const [loading, setLoading] = useState(true);
     const [editingRoom, setEditingRoom] = useState(null);
     const [isAddingRoom, setIsAddingRoom] = useState(false);
-    const [newRoom, setNewRoom] = useState({ number: '', floor: 1, type: 'Small', capacity: 2, base_rent: 10000 });
+    const [newRoom, setNewRoom] = useState({ number: '', floor: 1, type: 'Small', capacity: 2, base_rent: 10000, is_bulk_rented: false });
     const [error, setError] = useState(null);
+    const [floors, setFloors] = useState([]);
 
     const fetchRooms = async () => {
         try {
@@ -23,8 +24,18 @@ const Rooms = () => {
         }
     };
 
+    const fetchFloors = async () => {
+        try {
+            const res = await axios.get('/api/floors');
+            setFloors(res.data);
+        } catch (err) {
+            console.error("Failed to fetch floors", err);
+        }
+    };
+
     useEffect(() => {
         fetchRooms();
+        fetchFloors();
     }, []);
 
     const handleUpdate = async (e) => {
@@ -44,11 +55,12 @@ const Rooms = () => {
         try {
             await axios.post('/api/rooms', newRoom);
             setIsAddingRoom(false);
-            setNewRoom({ number: '', floor: 1, type: 'Small', capacity: 2, base_rent: 10000 });
+            setNewRoom({ number: '', floor: 1, type: 'Small', capacity: 2, base_rent: 10000, is_bulk_rented: false });
             fetchRooms();
         } catch (err) {
-            const errorMsg = err.response?.data?.message || err.response?.data?.error || "Failed to create room: Check required fields";
-            alert(errorMsg);
+            console.error("Create Room Error:", err);
+            const errorMsg = err.response?.data?.message || err.response?.data?.error || "Connection error: Could not reach server";
+            alert(`⚠️ Error: ${errorMsg}`);
         }
     };
 
@@ -76,6 +88,7 @@ const Rooms = () => {
                     <div className="px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-blue-400 text-xs font-mono uppercase">
                         Total Rooms: {rooms.length}
                     </div>
+
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
@@ -103,9 +116,16 @@ const Rooms = () => {
                     >
                         <div>
                             <div className="flex justify-between items-start mb-4">
-                                <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg ${room.available_slots > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/10 text-white/40'
-                                    }`}>
-                                    {room.number}
+                                <div className="flex items-center">
+                                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg ${room.available_slots > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/10 text-white/40'
+                                        }`}>
+                                        {room.number}
+                                    </div>
+                                    {room.is_bulk_rented && (
+                                        <div className="ml-3 px-2 py-1 bg-purple-500/20 text-purple-400 text-[10px] font-bold uppercase rounded-md border border-purple-500/30 text-center">
+                                            Bulk<br/>Rented
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => setEditingRoom(room)}
@@ -120,9 +140,11 @@ const Rooms = () => {
                                     <span className="text-white/40 uppercase tracking-wider text-[10px]">Type</span>
                                     <span className="text-white font-medium">{room.type}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
+                                <div className="flex justify-between text-sm items-center">
                                     <span className="text-white/40 uppercase tracking-wider text-[10px]">Base Rent</span>
-                                    <span className="text-blue-400 font-bold">Rs. {room.base_rent.toLocaleString()}</span>
+                                    <span className={room.is_bulk_rented ? "text-purple-400 font-bold" : "text-blue-400 font-bold"}>
+                                        {room.is_bulk_rented ? "Rs. 0 (Covered)" : `Rs. ${room.base_rent.toLocaleString()}`}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -199,10 +221,16 @@ const Rooms = () => {
                                     <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Base Monthly Rent (Rs)</label>
                                     <input
                                         type="number"
+                                        disabled={editingRoom.is_bulk_rented}
                                         value={editingRoom.base_rent}
                                         onChange={e => setEditingRoom({ ...editingRoom, base_rent: e.target.value })}
-                                        className="glass-input w-full h-12 px-4 rounded-xl text-blue-400 font-bold"
+                                        className={`glass-input w-full h-12 px-4 rounded-xl font-bold ${editingRoom.is_bulk_rented ? 'text-white/20' : 'text-blue-400'}`}
                                     />
+                                    {editingRoom.is_bulk_rented && (
+                                        <p className="text-[10px] text-purple-400 mt-2 font-bold uppercase tracking-tight">
+                                            Managed by Bulk Rental Agreement (Read-Only)
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -222,6 +250,21 @@ const Rooms = () => {
                                             <AlertCircle size={10} className="mr-1" /> Cannot reduce below current tenants
                                         </p>
                                     )}
+                                </div>
+                                
+                                <div className="pt-2">
+                                    <label className="flex items-center space-x-3 cursor-pointer p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                                        <input 
+                                            type="checkbox"
+                                            checked={editingRoom.is_bulk_rented}
+                                            onChange={e => setEditingRoom({...editingRoom, is_bulk_rented: e.target.checked})}
+                                            className="w-5 h-5 rounded border-purple-500/30 text-purple-600 focus:ring-purple-500 bg-black/20"
+                                        />
+                                        <div>
+                                            <span className="text-sm font-bold text-white block">Part of Bulk Rental?</span>
+                                            <span className="text-[10px] text-purple-400/60 uppercase font-mono">Room Rent will be 0 for sub-tenants</span>
+                                        </div>
+                                    </label>
                                 </div>
 
                                 <div className="flex space-x-4 mt-4">
@@ -279,21 +322,50 @@ const Rooms = () => {
                                             required
                                             type="text"
                                             value={newRoom.number}
-                                            onChange={e => setNewRoom({ ...newRoom, number: e.target.value })}
+                                            onChange={e => {
+                                                const num = e.target.value;
+                                                // Auto-detect floor: handles 101, F101, G101
+                                                let autoFloor = newRoom.floor;
+                                                if (num.length >= 1) {
+                                                    const match = num.match(/\d/);
+                                                    if (match) {
+                                                        autoFloor = parseInt(match[0]);
+                                                        if (num[0].toUpperCase() === 'G') autoFloor = 0;
+                                                    } else if (num[0].toUpperCase() === 'G') {
+                                                        autoFloor = 0;
+                                                    }
+                                                }
+                                                const isBulk = floors.find(f => f.floor_number === autoFloor)?.is_bulk_rented || false;
+                                                setNewRoom({ ...newRoom, number: num, floor: autoFloor, is_bulk_rented: isBulk });
+                                            }}
+                                            placeholder="e.g. 101, 201, 301..."
                                             className="glass-input w-full h-12 px-4 rounded-xl"
                                         />
+                                        <p className="text-[10px] text-blue-400/70 mt-1 font-bold">↑ Floor Auto-Detected (101→F1, 201→F2, G1→Ground)</p>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Floor</label>
+                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Floor (Auto-Detected)</label>
                                         <input
                                             required
                                             type="number"
                                             value={newRoom.floor}
-                                            onChange={e => setNewRoom({ ...newRoom, floor: parseInt(e.target.value) })}
-                                            className="glass-input w-full h-12 px-4 rounded-xl"
+                                            onChange={e => {
+                                                const fNum = parseInt(e.target.value);
+                                                const isBulk = floors.find(f => f.floor_number === fNum)?.is_bulk_rented || false;
+                                                setNewRoom({ ...newRoom, floor: fNum, is_bulk_rented: isBulk });
+                                            }}
+                                            className="glass-input w-full h-12 px-4 rounded-xl text-blue-400 font-bold"
                                         />
+                                        <div className="mt-1">
+                                          {floors.find(f => f.floor_number === parseInt(newRoom.floor))?.is_bulk_rented && (
+                                            <p className="text-[10px] text-purple-400 font-bold flex items-center">
+                                              <AlertCircle size={10} className="mr-1" /> This floor is currently Bulk Rented
+                                            </p>
+                                          )}
+                                        </div>
                                     </div>
                                 </div>
+
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -326,10 +398,31 @@ const Rooms = () => {
                                     <input
                                         required
                                         type="number"
+                                        disabled={newRoom.is_bulk_rented}
                                         value={newRoom.base_rent}
                                         onChange={e => setNewRoom({ ...newRoom, base_rent: e.target.value })}
-                                        className="glass-input w-full h-12 px-4 rounded-xl text-green-400 font-bold"
+                                        className={`glass-input w-full h-12 px-4 rounded-xl font-bold ${newRoom.is_bulk_rented ? 'text-white/20' : 'text-green-400'}`}
                                     />
+                                     {newRoom.is_bulk_rented && (
+                                        <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase tracking-tight">
+                                            Bulk Renting Active: Rent is covered by floor owner
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="pt-2">
+                                    <label className="flex items-center space-x-3 cursor-pointer p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                                        <input 
+                                            type="checkbox"
+                                            checked={newRoom.is_bulk_rented}
+                                            onChange={e => setNewRoom({...newRoom, is_bulk_rented: e.target.checked})}
+                                            className="w-5 h-5 rounded border-purple-500/30 text-purple-600 focus:ring-purple-500 bg-black/20"
+                                        />
+                                        <div>
+                                            <span className="text-sm font-bold text-white block">Bulk Rented?</span>
+                                            <span className="text-[10px] text-purple-400/60 uppercase font-mono tracking-tighter">This room will have Rs. 0 rent for sub-tenants</span>
+                                        </div>
+                                    </label>
                                 </div>
 
                                 <button
@@ -342,6 +435,8 @@ const Rooms = () => {
                         </motion.div>
                     </div>
                 )}
+
+
             </AnimatePresence>
         </div>
     );

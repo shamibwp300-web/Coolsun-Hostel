@@ -11,6 +11,7 @@ import Tenants from './pages/Tenants';
 import Finance from './pages/Finance';
 import Settings from './pages/Settings';
 import Rooms from './pages/Rooms';
+import BulkRenting from './pages/BulkRenting';
 import PoliceVerification from './pages/PoliceVerification';
 import Electricity from './pages/Electricity';
 import Tasks from './pages/Tasks';
@@ -70,6 +71,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Rooms />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/bulk-rent"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <BulkRenting />
                 </Layout>
               </ProtectedRoute>
             }

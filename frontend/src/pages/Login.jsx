@@ -6,18 +6,26 @@ import { useNavigate } from 'react-router-dom';
 const Login = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   const handleLogin = (e) => {
     e.preventDefault();
-    setLoading(true);
+    setError('');
     
-    // Simulate Auth API Call
-    setTimeout(() => {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('userRole', 'Admin');
-        setLoading(false);
-        navigate('/dashboard');
-    }, 1500);
+    if (username === 'admin@coolsun.pk' && password === 'Coolsun@23*+') {
+        setLoading(true);
+        // Simulate Auth Delay
+        setTimeout(() => {
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('userRole', 'Admin');
+            setLoading(false);
+            navigate('/dashboard');
+        }, 1000);
+    } else {
+        setError('Invalid username or password');
+    }
   };
 
   return (
@@ -66,15 +74,23 @@ const Login = () => {
           </motion.div>
 
           <form className="space-y-6" onSubmit={handleLogin}>
+            {error && (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-500 text-center">
+                    {error}
+                </div>
+            )}
+            
             <div className="space-y-2">
               <label className="text-xs font-medium uppercase tracking-wider text-white/40">Username</label>
               <div className="relative group">
                 <User className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/30 transition-colors group-focus-within:text-blue-400" />
                 <input 
                   type="text" 
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="h-12 w-full rounded-xl border border-white/10 bg-black/20 pl-12 pr-4 text-white placeholder-white/20 transition-all focus:border-blue-500/50 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-                  placeholder="admin@coolsun.com"
-                  defaultValue="admin@coolsun.com"
+                  placeholder="admin@coolsun.pk"
+                  required
                 />
               </div>
             </div>
@@ -85,9 +101,11 @@ const Login = () => {
                 <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/30 transition-colors group-focus-within:text-blue-400" />
                 <input 
                   type="password" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="h-12 w-full rounded-xl border border-white/10 bg-black/20 pl-12 pr-4 text-white placeholder-white/20 transition-all focus:border-blue-500/50 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                   placeholder="••••••••"
-                  defaultValue="password"
+                  required
                 />
               </div>
             </div>

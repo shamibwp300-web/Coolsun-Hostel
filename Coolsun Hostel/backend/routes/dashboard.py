@@ -38,26 +38,20 @@ def get_dashboard_summary():
     try:
         # Collected (All-time)
         current_collected = db.session.query(func.sum(Ledger.amount)).filter(
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT']),
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE']),
             Ledger.status == 'PAID',
             Ledger.deleted_at == None
         ).scalar() or 0.0
 
-        # Pending: this month
-        current_pending = db.session.query(func.sum(Ledger.amount)).filter(
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
+        # Pending: All PENDING rent (Current + Arrears)
+        current_pending = db.session.query(func.coalesce(func.sum(Ledger.amount), 0.0)).filter(
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE']),
             Ledger.status == 'PENDING',
-            Ledger.timestamp >= start_of_month,
             Ledger.deleted_at == None
         ).scalar() or 0.0
 
-        # Legacy Arrears: BEFORE this month
-        legacy_arrears = db.session.query(func.sum(Ledger.amount)).filter(
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
-            Ledger.status == 'PENDING',
-            Ledger.timestamp < start_of_month,
-            Ledger.deleted_at == None
-        ).scalar() or 0.0
+        # Legacy Arrears: (Keeping this at 0 for now as current_pending sums all)
+        legacy_arrears = 0.0
 
         # Expenses (All-time)
         from backend.models import Expense

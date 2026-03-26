@@ -120,18 +120,60 @@ def handle_expenses():
 
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
-    tenants = Tenant.query.filter_by(deleted_at=None).all()
-    generated = 0
+    from backend.models import Floor
     current_month_str = datetime.utcnow().strftime('%Y-%m')
+    generated = 0
     
-    for t in tenants:
-        # Check if rent already generated for this month
-        # Use Python to check to avoid SQLite specific strftime issues
-        existing = Ledger.query.filter_by(tenant_id=t.id, type='RENT', deleted_at=None).all()
+    # 1. Generate Rent for Bulk Rented Floors (Fixed Rent for the Bulk Tenant)
+    bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
+    for f in bulk_floors:
+        if not f.bulk_tenant_id:
+            continue
+            
+        # Check if already billed FOR THIS FLOOR specifically
+        month_label = datetime.utcnow().strftime('%B %Y')
+        floor_description = f"Floor Rent ({f.name}) for {month_label}"
+        
+        existing = Ledger.query.filter_by(
+            tenant_id=f.bulk_tenant_id, 
+            type='RENT', 
+            deleted_at=None
+        ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
+        
         already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
         
         if not already_billed:
-            rent_amount = t.room.base_rent if t.room else 10000
+            l = Ledger(
+                tenant_id=f.bulk_tenant_id,
+                amount=f.bulk_rent_amount or 0,
+                type='RENT',
+                status='PENDING',
+                description=floor_description
+            )
+            db.session.add(l)
+            generated += 1
+
+    # 2. Generate Rent for Regular Tenants (Skip sub-tenants on bulk-rented floors)
+    tenants = Tenant.query.filter_by(deleted_at=None).all()
+    for t in tenants:
+        if not t.room:
+            continue
+            
+        # Skip if the tenant's room belongs to a bulk-rented floor
+        # Do not double-bill the subtenants because their rent is covered by the bulk floor owner
+        if t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
+            continue
+            
+        # Check BOTH RENT and PRIVATE_RENT types
+        existing = Ledger.query.filter(
+            Ledger.tenant_id == t.id,
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
+            Ledger.deleted_at == None
+        ).all()
+        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        
+        if not already_billed:
+            rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
             
             l = Ledger(
                 tenant_id=t.id,
@@ -144,4 +186,39 @@ def generate_bulk_rent():
             generated += 1
             
     db.session.commit()
-    return jsonify({"message": f"Generated rent for {generated} tenants"}), 200
+    return jsonify({"message": f"Generated rent for {generated} profiles (including bulk floors)"}), 200
+
+@finance_bp.route('/finance/opening-balance', methods=['POST'])
+def add_opening_balance():
+    data = request.json
+    tenant_id = data.get('tenant_id')
+    amount = float(data.get('amount', 0))
+    # balance_type: 'DUE' (owed by tenant) or 'ADVANCE' (paid in advance)
+    balance_type = data.get('balance_type', 'DUE')
+    
+    if not tenant_id or amount <= 0:
+        return jsonify({"error": "Invalid data"}), 400
+        
+    if balance_type == 'DUE':
+        # Create a PENDING entry (Receivable)
+        entry = Ledger(
+            tenant_id=tenant_id,
+            amount=amount,
+            type='OPENING_BALANCE',
+            status='PENDING',
+            description="Manual Opening Balance (Due)"
+        )
+    else:
+        # Create a PAID entry (Advance/Credit)
+        entry = Ledger(
+            tenant_id=tenant_id,
+            amount=amount,
+            type='OPENING_BALANCE',
+            status='PAID',
+            payment_method='Manual Entry',
+            description="Manual Opening Balance (Advance/Credit)"
+        )
+        
+    db.session.add(entry)
+    db.session.commit()
+    return jsonify({"message": "Opening balance added successfully"}), 201

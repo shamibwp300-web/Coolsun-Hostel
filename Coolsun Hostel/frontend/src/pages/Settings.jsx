@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Save, Server, Shield, Smartphone, Plus, Trash2, Edit2, Check, X, AlertCircle } from 'lucide-react';
+import { Save, Server, Shield, Smartphone, Plus, Trash2, Edit2, Check, X, AlertCircle, AlertTriangle } from 'lucide-react';
+
 import axios from 'axios';
 
 const API = '/api';
@@ -13,6 +14,12 @@ const Settings = () => {
     const [editingFine, setEditingFine] = useState(null); // { id, name, amount, description }
     const [pendingExpenses, setPending] = useState([]);
     const [expTab, setExpTab] = useState('fines'); // 'fines' | 'approvals'
+    const [resetConfirm, setResetConfirm] = useState(false);
+    const [resetTyped, setResetTyped] = useState('');
+    const [resetting, setResetting] = useState(false);
+    const [includeStructure, setIncludeStructure] = useState(false);
+    const [saveStatus, setSaveStatus] = useState(null); // 'saving' | 'success' | null
+
 
     const fetchFines = async () => {
         try { const r = await axios.get(`${API}/settings/fines`); setFines(r.data); }
@@ -57,6 +64,39 @@ const Settings = () => {
     const approveExpense = async (id, action) => {
         await axios.put(`${API}/expenses/${id}/approve`, { action });
         fetchPending();
+    };
+
+    const handleReset = async () => {
+        if (resetTyped !== 'RESET ALL DATA') {
+            alert('Please type exactly: RESET ALL DATA');
+            return;
+        }
+        setResetting(true);
+        try {
+            const r = await axios.post(`${API}/admin/reset`, { 
+                confirm: 'RESET_ALL_DATA',
+                includeStructure: includeStructure
+            });
+            alert(r.data.message);
+            setResetConfirm(false);
+            setResetTyped('');
+            setIncludeStructure(false);
+            // Refresh counts if needed, or redirect
+            window.location.reload(); 
+        } catch (e) {
+            alert(e.response?.data?.error || 'Reset failed');
+        } finally {
+            setResetting(false);
+        }
+    };
+
+    const handleSaveSettings = async () => {
+        setSaveStatus('saving');
+        // Simulated save for UI feedback as requested
+        setTimeout(() => {
+            setSaveStatus('success');
+            setTimeout(() => setSaveStatus(null), 3000);
+        }, 1000);
     };
 
     return (
@@ -236,12 +276,66 @@ const Settings = () => {
                     </div>
                 </div>
 
-                <div className="flex justify-end">
+                {/* ⚠️ DANGER ZONE */}
+                <div className="glass-panel p-8 rounded-xl space-y-6 border border-red-500/20 bg-red-500/5">
+                    <h3 className="text-xl font-bold text-red-400 flex items-center">
+                        <AlertTriangle className="mr-3" /> Danger Zone
+                    </h3>
+                    <p className="text-white/50 text-sm">This will permanently delete all Tenants, Ledger entries, Utility Bills, and Expenses. Rooms, Floors, and User accounts will be preserved.</p>
+                    {!resetConfirm ? (
+                        <button
+                            onClick={() => setResetConfirm(true)}
+                            className="px-6 py-3 rounded-xl bg-red-600/30 hover:bg-red-600/60 text-red-400 font-bold border border-red-500/30 transition-all flex items-center gap-2"
+                        >
+                            <Trash2 size={18} /> Reset All Operational Data
+                        </button>
+                    ) : (
+                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 p-5 bg-red-900/20 border border-red-500/40 rounded-xl">
+                            <p className="text-red-300 font-bold text-sm">⚠️ Are you absolutely sure? Type <span className="font-mono bg-black/40 px-2 py-0.5 rounded">RESET ALL DATA</span> to confirm:</p>
+                            <input
+                                value={resetTyped}
+                                onChange={e => setResetTyped(e.target.value)}
+                                placeholder="Type: RESET ALL DATA"
+                                className="w-full px-4 py-3 rounded-xl bg-black/40 border border-red-500/50 text-white font-mono focus:outline-none focus:border-red-400"
+                            />
+                            
+                            <label className="flex items-center gap-3 p-3 rounded-lg bg-black/20 border border-red-500/20 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={includeStructure}
+                                    onChange={e => setIncludeStructure(e.target.checked)}
+                                    className="w-5 h-5 accent-red-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-bold text-red-300 block">Wipe Rooms & Floors too?</span>
+                                    <span className="text-[10px] text-red-400/60 uppercase">Warning: This will delete all physical room data</span>
+                                </div>
+                            </label>
+                            <div className="flex gap-3">
+                                <button onClick={() => { setResetConfirm(false); setResetTyped(''); }}
+                                    className="flex-1 py-3 rounded-xl bg-white/5 text-white/60 font-medium hover:bg-white/10 transition-all">Cancel</button>
+                                <button onClick={handleReset} disabled={resetting || resetTyped !== 'RESET ALL DATA'}
+                                    className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 disabled:bg-white/10 disabled:text-white/30 text-white font-bold transition-all flex items-center justify-center gap-2">
+                                    <Trash2 size={16} />{resetting ? 'Clearing...' : 'Confirm Reset'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
+
+                <div className="flex justify-end items-center gap-4">
+                    {saveStatus === 'success' && (
+                        <motion.span initial={{opacity:0}} animate={{opacity:1}} className="text-green-400 text-sm font-bold flex items-center gap-1">
+                            <Check size={16}/> Settings Saved Successfully!
+                        </motion.span>
+                    )}
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center shadow-lg shadow-blue-500/30">
-                        <Save size={20} className="mr-2" /> Save Changes
+                        onClick={handleSaveSettings}
+                        disabled={saveStatus === 'saving'}
+                        className="px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center shadow-lg shadow-blue-500/30 disabled:bg-blue-800">
+                        {saveStatus === 'saving' ? 'Saving...' : <><Save size={20} className="mr-2" /> Save Changes</>}
                     </motion.button>
                 </div>
             </div>

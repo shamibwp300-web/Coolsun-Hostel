@@ -6,6 +6,7 @@ import axios from 'axios';
 const Finance = () => {
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showOpeningBalanceModal, setShowOpeningBalanceModal] = useState(false);
 
     const [summary, setSummary] = useState({ current_collected: 0, current_pending: 0 });
     const [transactions, setTransactions] = useState([]);
@@ -26,6 +27,12 @@ const Finance = () => {
         amount: ''
     });
 
+    const [openingBalanceForm, setOpeningBalanceForm] = useState({
+        tenant_id: '',
+        amount: '',
+        balance_type: 'DUE' // 'DUE' or 'ADVANCE'
+    });
+
     const fetchData = async () => {
         try {
             const [dashRes, ledgRes, expRes, tenRes] = await Promise.all([
@@ -35,8 +42,8 @@ const Finance = () => {
                 axios.get('/api/tenants')
             ]);
             setSummary(dashRes.data.financials);
-            // Filter ledger to only show PAID transactions for the revenue stream
-            setTransactions(ledgRes.data.filter(t => t.status === 'PAID'));
+            // Show all ledger records (including PENDING rent invoices)
+            setTransactions(ledgRes.data);
             setExpenses(expRes.data);
             setTenants(tenRes.data);
         } catch (e) {
@@ -83,6 +90,20 @@ const Finance = () => {
         setLoading(false);
     };
 
+    const handleOpeningBalanceSubmit = async () => {
+        if (!openingBalanceForm.tenant_id || !openingBalanceForm.amount) return alert("Select tenant and enter amount");
+        setLoading(true);
+        try {
+            await axios.post('/api/finance/opening-balance', openingBalanceForm);
+            setShowOpeningBalanceModal(false);
+            setOpeningBalanceForm({ tenant_id: '', amount: '', balance_type: 'DUE' });
+            fetchData();
+        } catch (e) {
+            alert(e.response?.data?.error || "Error adding opening balance");
+        }
+        setLoading(false);
+    };
+
     const handleGenerateRent = async () => {
         if (!window.confirm("Generate this month's rent for all active tenants?")) return;
         try {
@@ -111,6 +132,14 @@ const Finance = () => {
                         className="flex-1 md:flex-none px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center shadow-lg shadow-blue-500/20"
                     >
                         <DollarSign size={20} className="mr-2" /> Receive Payment
+                    </motion.button>
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowOpeningBalanceModal(true)}
+                        className="flex-1 md:flex-none px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center justify-center shadow-lg shadow-purple-500/20"
+                    >
+                        <Plus size={20} className="mr-2" /> Opening Balance
                     </motion.button>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -144,8 +173,10 @@ const Finance = () => {
                                         onChange={e => setPaymentForm({ ...paymentForm, tenant_id: e.target.value })}
                                         className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40">
                                         <option value="">-- Choose Tenant --</option>
-                                        {tenants.map(t => (
-                                            <option key={t.id} value={t.id}>{t.name} (Room {t.room}) - Due: Rs.{t.balance}</option>
+                                        {tenants.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                                            <option key={t.id} value={t.id}>
+                                                {t.name} (Room {t.room}) — Current Due: Rs.{t.balance || 0}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
@@ -165,6 +196,65 @@ const Finance = () => {
                                     className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold tracking-wide mt-4 disabled:opacity-50"
                                 >
                                     {loading ? 'Processing...' : 'Mark as Paid'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Opening Balance Modal */}
+            <AnimatePresence>
+                {showOpeningBalanceModal && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setShowOpeningBalanceModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                            className="glass-card w-full max-w-md p-6 border-purple-500/30 shadow-2xl relative z-[111]">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-white">Add Opening Balance</h3>
+                                <button onClick={() => setShowOpeningBalanceModal(false)} className="text-white/30 hover:text-white"><X size={20} /></button>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="flex bg-white/5 p-1 rounded-xl mb-2">
+                                    <button
+                                        onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'DUE' })}
+                                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${openingBalanceForm.balance_type === 'DUE' ? 'bg-orange-600 text-white shadow-lg' : 'text-white/50 hover:text-white'}`}
+                                    >Previous Due (Owed)</button>
+                                    <button
+                                        onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'ADVANCE' })}
+                                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${openingBalanceForm.balance_type === 'ADVANCE' ? 'bg-green-600 text-white shadow-lg' : 'text-white/50 hover:text-white'}`}
+                                    >Advance (Paid)</button>
+                                </div>
+                                <div>
+                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Select Tenant</label>
+                                    <select
+                                        value={openingBalanceForm.tenant_id}
+                                        onChange={e => setOpeningBalanceForm({ ...openingBalanceForm, tenant_id: e.target.value })}
+                                        className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40">
+                                        <option value="">-- Choose Tenant --</option>
+                                        {tenants.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                                            <option key={t.id} value={t.id}>{t.name} (Room {t.room})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount (Rs)</label>
+                                    <input
+                                        type="number"
+                                        value={openingBalanceForm.amount}
+                                        onChange={(e) => setOpeningBalanceForm({ ...openingBalanceForm, amount: e.target.value })}
+                                        className="glass-input w-full h-12 px-4 rounded-xl text-lg font-mono"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleOpeningBalanceSubmit}
+                                    disabled={loading}
+                                    className={`w-full py-3 rounded-xl text-white font-bold tracking-wide mt-4 disabled:opacity-50 transition-all ${openingBalanceForm.balance_type === 'DUE' ? 'bg-orange-600 hover:bg-orange-500' : 'bg-green-600 hover:bg-green-500'}`}
+                                >
+                                    {loading ? 'Processing...' : 'Add Balance'}
                                 </button>
                             </div>
                         </motion.div>
@@ -245,15 +335,23 @@ const Finance = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-white/5 p-4 rounded-lg">
                                 <p className="text-xs uppercase text-white/40">Total Collected</p>
-                                <p className="text-2xl font-bold text-green-400">Rs. {summary.current_collected?.toLocaleString() || 0}</p>
+                                <p className="text-2xl font-bold text-green-400">Rs. {Number(summary?.current_collected || 0).toLocaleString()}</p>
                             </div>
-                            <div className="bg-white/5 p-4 rounded-lg">
-                                <p className="text-xs uppercase text-white/40">Total Expenses</p>
-                                <p className="text-2xl font-bold text-red-400">Rs. {summary.current_expenses?.toLocaleString() || 0}</p>
+                            <div className="bg-white/5 p-4 rounded-lg border-l-2 border-orange-500/50">
+                                <p className="text-xs uppercase text-white/40">Current Pending</p>
+                                <p className="text-2xl font-bold text-orange-400">Rs. {Number(summary?.current_pending || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-lg border-l-2 border-red-500/50">
+                                <p className="text-xs uppercase text-white/40">Arrears (Older)</p>
+                                <p className="text-2xl font-bold text-red-500">Rs. {Number(summary?.legacy_arrears || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-lg border border-red-500/20">
+                                <p className="text-xs uppercase text-white/40 font-bold text-red-400">Total Expenses</p>
+                                <p className="text-2xl font-bold text-white">Rs. {Number(summary?.current_expenses || 0).toLocaleString()}</p>
                             </div>
                             <div className="bg-white/5 p-4 rounded-lg border border-green-500/20">
                                 <p className="text-xs uppercase text-white/40 font-bold text-green-400">Net Cash in Hand</p>
-                                <p className="text-2xl font-bold text-white">Rs. {summary.net_cash?.toLocaleString() || 0}</p>
+                                <p className="text-2xl font-bold text-white">Rs. {Number(summary?.net_cash || 0).toLocaleString()}</p>
                             </div>
                         </div>
                     </div>
@@ -272,11 +370,11 @@ const Finance = () => {
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <p className="text-sm font-medium text-white">{txn.name}</p>
-                                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${txn.payment_method === 'Account' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-500'}`}>
-                                                    {txn.payment_method || 'Cash'}
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${txn.status === 'PENDING' ? 'bg-orange-500/20 text-orange-400' : 'bg-green-500/20 text-green-400'}`}>
+                                                    {txn.status}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-white/40">Room {txn.room} &bull; <span className={txn.type === 'DEPOSIT' ? 'text-purple-300' : 'text-green-300'}>{txn.type}</span> {txn.description && `(${txn.description})`}</p>
+                                            <p className="text-xs text-white/40">Room {txn.room} &bull; <span className={txn.type === 'DEPOSIT' ? 'text-purple-300' : 'text-blue-300'}>{txn.type}</span> {txn.description && `(${txn.description})`}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
