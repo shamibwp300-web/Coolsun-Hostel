@@ -8,7 +8,7 @@ app = create_app()
 def seed_data():
     with app.app_context():
         # Clear existing data first (optional, but good for consistent testing)
-        db.drop_all() 
+        # db.drop_all() 
         db.create_all()
         
         # Ensure rooms exist (if not already seeded)

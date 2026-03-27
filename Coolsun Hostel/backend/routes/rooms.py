@@ -7,29 +7,32 @@ rooms_bp = Blueprint('rooms', __name__)
 
 @rooms_bp.route('/rooms', methods=['GET'])
 def get_rooms():
-    rooms = Room.query.filter_by(deleted_at=None).all()
-    result = []
-    for room in rooms:
-        active_tenants = room.get_active_tenants()
-        floor = room.floor_ref
-        floor_rooms = [r.id for r in floor.rooms if r.deleted_at is None] if floor else []
-        active_floor_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count() if floor_rooms else 0
+    try:
+        rooms = Room.query.filter_by(deleted_at=None).all()
+        result = []
+        for room in rooms:
+            active_tenants = room.get_active_tenants()
+            floor = room.floor_ref
+            floor_rooms = [r.id for r in floor.rooms if r.deleted_at is None] if floor else []
+            active_floor_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count() if floor_rooms else 0
 
-        result.append({
-            "id": room.id,
-            "number": room.number,
-            "floor": room.floor,
-            "type": room.type,
-            "capacity": room.capacity,
-            "base_rent": float(room.base_rent or 0),
-            "occupied_beds": len(active_tenants),
-            "available_slots": room.capacity - len(active_tenants),
-            "is_bulk_rented": room.is_bulk_rented,
-            "max_bulk_capacity": floor.max_bulk_capacity if floor else 30,
-            "active_floor_tenants": active_floor_tenants,
-            "bulk_tenant_id": floor.bulk_tenant_id if floor else None
-        })
-    return jsonify(result), 200
+            result.append({
+                "id": room.id,
+                "number": room.number,
+                "floor": room.floor,
+                "type": room.type,
+                "capacity": room.capacity,
+                "base_rent": float(room.base_rent or 0),
+                "occupied_beds": len(active_tenants),
+                "available_slots": room.capacity - len(active_tenants),
+                "is_bulk_rented": room.is_bulk_rented,
+                "max_bulk_capacity": floor.max_bulk_capacity if floor else 30,
+                "active_floor_tenants": active_floor_tenants,
+                "bulk_tenant_id": floor.bulk_tenant_id if floor else None
+            })
+        return jsonify(result), 200
+    finally:
+        db.session.remove()
 
 @rooms_bp.route('/rooms/<int:room_id>', methods=['PUT'])
 def update_room(room_id):
@@ -67,6 +70,8 @@ def update_room(room_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.remove()
 
 @rooms_bp.route('/rooms', methods=['POST'])
 def create_room():
@@ -127,6 +132,8 @@ def create_room():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.remove()
 
 @rooms_bp.route('/rooms/<int:room_id>', methods=['DELETE'])
 def delete_room(room_id):
@@ -140,27 +147,32 @@ def delete_room(room_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.remove()
 
 @rooms_bp.route('/floors', methods=['GET'])
 def get_floors():
-    floors = Floor.query.filter_by(deleted_at=None).all()
-    result = []
-    for f in floors:
-        floor_rooms = [r.id for r in f.rooms if r.deleted_at is None]
-        active_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count() if floor_rooms else 0
-        
-        result.append({
-            "id": f.id,
-            "floor_number": f.floor_number,
-            "name": f.name,
-            "is_bulk_rented": f.is_bulk_rented,
-            "bulk_tenant_id": f.bulk_tenant_id,
-            "bulk_rent_amount": float(f.bulk_rent_amount or 0),
-            "bulk_security_deposit": float(f.bulk_security_deposit or 0),
-            "max_bulk_capacity": f.max_bulk_capacity,
-            "active_tenants": active_tenants
-        })
-    return jsonify(result), 200
+    try:
+        floors = Floor.query.filter_by(deleted_at=None).all()
+        result = []
+        for f in floors:
+            floor_rooms = [r.id for r in f.rooms if r.deleted_at is None]
+            active_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count() if floor_rooms else 0
+            
+            result.append({
+                "id": f.id,
+                "floor_number": f.floor_number,
+                "name": f.name,
+                "is_bulk_rented": f.is_bulk_rented,
+                "bulk_tenant_id": f.bulk_tenant_id,
+                "bulk_rent_amount": float(f.bulk_rent_amount or 0),
+                "bulk_security_deposit": float(f.bulk_security_deposit or 0),
+                "max_bulk_capacity": f.max_bulk_capacity,
+                "active_tenants": active_tenants
+            })
+        return jsonify(result), 200
+    finally:
+        db.session.remove()
 
 @rooms_bp.route('/floors/<int:floor_id>/bulk_config', methods=['POST'])
 def save_bulk_config(floor_id):
@@ -179,9 +191,7 @@ def save_bulk_config(floor_id):
         floor.bulk_security_deposit = data.get('bulk_security_deposit')
         floor.max_bulk_capacity = data.get('max_bulk_capacity', 30)
 
-        # Financial Integration: Create Ledger entries if a tenant is assigned
         if tenant_id:
-            # 1. Security Deposit Entry
             existing_deposit = Ledger.query.filter_by(
                 tenant_id=tenant_id, 
                 type='DEPOSIT', 
@@ -198,7 +208,6 @@ def save_bulk_config(floor_id):
                     description=f"Bulk Floor Rental Security ({floor.name}) - One-time"
                 ))
             
-            # 2. Initial Rent Entry (if not already billed this month)
             current_month = datetime.utcnow().strftime('%Y-%m')
             existing_rent = Ledger.query.filter_by(
                 tenant_id=tenant_id,
@@ -221,11 +230,9 @@ def save_bulk_config(floor_id):
         floor.bulk_rent_amount = None
         floor.bulk_security_deposit = None
         
-    # Update all rooms on this floor
     for room in floor.rooms:
         if room.id in selected_room_ids:
             room.is_bulk_rented = True
-            # room.base_rent = 0 # Optional: User said it should be 0 in system
         else:
             room.is_bulk_rented = False
             
@@ -235,6 +242,8 @@ def save_bulk_config(floor_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.remove()
 
 @rooms_bp.route('/floors/<int:floor_id>/bulk_rent', methods=['POST'])
 def update_bulk_rent(floor_id):
@@ -260,3 +269,5 @@ def update_bulk_rent(floor_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.remove()

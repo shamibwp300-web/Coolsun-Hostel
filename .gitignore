@@ -22,6 +22,8 @@ ENV/
 *.sqlite3
 backend/hostel.db
 hostel.db
+*.db-shm
+*.db-wal
 
 # Environment variables
 .env

@@ -15,6 +15,11 @@ def reset_data():
     if data.get('confirm') != 'RESET_ALL_DATA':
         return jsonify({"error": "Invalid confirmation token. Send { \"confirm\": \"RESET_ALL_DATA\" }"}), 400
 
+    # 🛡️ Production Guard
+    is_prod = "supabase" in (db.engine.url.database or "").lower() or "supabase" in str(db.engine.url)
+    if is_prod and os.getenv('ALLOW_RESET_IN_PROD') != 'TRUE':
+        return jsonify({"error": "DANGER: Reset is disabled on the LIVE site for security. Enable via ALLOW_RESET_IN_PROD=TRUE if absolutely necessary."}), 403
+
     try:
         include_structure = data.get('includeStructure', False)
 
@@ -41,9 +46,9 @@ def reset_data():
             db.session.execute(text("DELETE FROM floors"))
             msg = "✅ ALL data (including Rooms & Floors) cleared successfully."
         else:
-            # Reset bulk rental config on all floors, but keep floors/rooms
-            db.session.execute(text("UPDATE floors SET is_bulk_rented=0, bulk_tenant_id=NULL, bulk_rent_amount=NULL, bulk_security_deposit=NULL"))
-            db.session.execute(text("UPDATE rooms SET is_bulk_rented=0"))
+            # Reset bulk rental config on all floors AND rooms using model objects for consistency
+            Floor.query.update({Floor.is_bulk_rented: False, Floor.bulk_tenant_id: None, Floor.bulk_rent_amount: None, Floor.bulk_security_deposit: None})
+            Room.query.update({Room.is_bulk_rented: False})
             msg = "✅ Operational data cleared. Room/Floor structure preserved."
 
         db.session.commit()
@@ -52,6 +57,8 @@ def reset_data():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.remove()
 
 
 @admin_bp.route('/admin/fix_room_floors', methods=['POST'])

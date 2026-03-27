@@ -46,7 +46,11 @@ def create_app():
 
     # Auto-create tables and Seed default users on startup
     with app.app_context():
-        db.create_all()
+        is_prod = "supabase" in app.config['SQLALCHEMY_DATABASE_URI'].lower()
+        
+        # 🛡️ Structural Guard: Auto-create and migration only for SQLite by default
+        if not is_prod or os.getenv('ALLOW_MIGRATIONS_IN_PROD') == 'TRUE':
+            db.create_all()
         
         # --- Auto Schema Migration (Lock) ---
         from sqlalchemy import text
