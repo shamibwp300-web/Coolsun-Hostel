@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from backend.models import db, Tenant, Ledger, Expense
-from datetime import datetime
+from datetime import datetime, date
 
 finance_bp = Blueprint('finance', __name__)
 
@@ -93,7 +93,8 @@ def handle_expenses():
             category=data.get('category', 'Operational'),
             amount=data.get('amount'),
             description=data.get('description'),
-            sub_note=data.get('sub_note')
+            sub_note=data.get('sub_note'),
+            date=date.today()
         )
         if data.get('type') == 'Personal':
             e.category = 'Owner Personal'
@@ -113,7 +114,7 @@ def handle_expenses():
             "amount": float(exp.amount),
             "description": exp.description,
             "note": exp.sub_note or "",
-            "date": exp.date.strftime('%b %d, %Y'),
+            "date": exp.date.strftime('%b %d, %Y') if exp.date else "N/A",
             "type": btype
         })
     return jsonify(res), 200

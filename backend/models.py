@@ -204,7 +204,7 @@ class Expense(db.Model, SoftDeleteMixin):
     category = db.Column(db.String(100))
     description = db.Column(db.Text)
     sub_note = db.Column(db.Text)
-    date = db.Column(db.Date)
+    date = db.Column(db.Date, default=date.today)
     approval_status = db.Column(db.String(20), default="Pending")
 
 class MoveOutRecord(db.Model, SoftDeleteMixin):
