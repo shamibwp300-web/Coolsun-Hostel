@@ -32,22 +32,49 @@ def reset_data():
         db.session.execute(text("DELETE FROM maintenance_requests"))
         db.session.execute(text("DELETE FROM meter_readings"))
         db.session.execute(text("DELETE FROM water_bills"))
-        db.session.execute(text("DELETE FROM internet_bills"))
-        db.session.execute(text("DELETE FROM expenses"))
-        db.session.execute(text("DELETE FROM audit_logs"))
-        db.session.execute(text("DELETE FROM tasks"))
-
-        # Reset tenant sub-tenant links before deleting tenants
-        db.session.execute(text("UPDATE tenants SET parent_tenant_id = NULL"))
-        db.session.execute(text("DELETE FROM tenants"))
-
         if include_structure:
+            # Full wipe including rooms and floors (hard delete)
+            db.session.execute(text("DELETE FROM documents"))
+            db.session.execute(text("DELETE FROM billing_profiles"))
+            db.session.execute(text("DELETE FROM ledger"))
+            db.session.execute(text("DELETE FROM move_out_records"))
+            db.session.execute(text("DELETE FROM maintenance_requests"))
+            db.session.execute(text("DELETE FROM meter_readings"))
+            db.session.execute(text("DELETE FROM water_bills"))
+            db.session.execute(text("DELETE FROM internet_bills"))
+            db.session.execute(text("DELETE FROM expenses"))
+            db.session.execute(text("DELETE FROM audit_logs"))
+            db.session.execute(text("DELETE FROM tasks"))
+
+            db.session.execute(text("UPDATE tenants SET parent_tenant_id = NULL"))
+            db.session.execute(text("DELETE FROM tenants"))
+
             db.session.execute(text("DELETE FROM rooms"))
             db.session.execute(text("DELETE FROM floors"))
             msg = "✅ ALL data (including Rooms & Floors) cleared successfully."
         else:
-            # Reset bulk rental config on all floors AND rooms using model objects for consistency
-            Floor.query.update({Floor.is_bulk_rented: False, Floor.bulk_tenant_id: None, Floor.bulk_rent_amount: None, Floor.bulk_security_deposit: None})
+            # Operational wipe only (soft delete for most, hard delete for some, reset bulk status)
+            # Soft delete operational data
+            Tenant.query.update({Tenant.deleted_at: datetime.utcnow()})
+            Ledger.query.update({Ledger.deleted_at: datetime.utcnow()})
+            Expense.query.update({Expense.deleted_at: datetime.utcnow()})
+            MeterReading.query.update({MeterReading.deleted_at: datetime.utcnow()})
+            WaterBill.query.update({WaterBill.deleted_at: datetime.utcnow()})
+            InternetBill.query.update({InternetBill.deleted_at: datetime.utcnow()})
+            MoveOutRecord.query.update({MoveOutRecord.deleted_at: datetime.utcnow()})
+            Document.query.update({Document.deleted_at: datetime.utcnow()})
+            BillingProfile.query.update({BillingProfile.deleted_at: datetime.utcnow()})
+            MaintenanceRequest.query.update({MaintenanceRequest.deleted_at: datetime.utcnow()})
+            AuditLog.query.update({AuditLog.deleted_at: datetime.utcnow()})
+            Task.query.update({Task.deleted_at: datetime.utcnow()})
+
+            # 🛡️ Global Reset of Bulk Status
+            Floor.query.update({
+                Floor.is_bulk_rented: False,
+                Floor.bulk_tenant_id: None,
+                Floor.bulk_rent_amount: 0,
+                Floor.bulk_security_deposit: 0
+            })
             Room.query.update({Room.is_bulk_rented: False})
             msg = "✅ Operational data cleared. Room/Floor structure preserved."
 
@@ -63,26 +90,31 @@ def reset_data():
 
 @admin_bp.route('/admin/fix_room_floors', methods=['POST'])
 def fix_room_floors():
-    """
-    Auto-correct floor assignments for all rooms based on room number prefix.
-    101-199 → Floor 1,  201-299 → Floor 2,  G01 → Floor 0
-    """
-    from backend.models import Room
-    rooms = Room.query.filter_by(deleted_at=None).all()
+    """Maps rooms to floors based on room number (e.g., 101 -> Floor 1) and sets floor_id."""
+    from backend.models import Room, Floor
+    rooms = Room.query.all()
+    floors = {f.floor_number: f.id for f in Floor.query.all()}
     fixed = []
+    
     for room in rooms:
-        num = str(room.number).strip()
-        if not num:
+        try:
+            num_str = "".join(filter(str.isdigit, room.number))
+            if num_str:
+                correct = int(num_str[0]) if len(num_str) >= 3 else 0
+                
+                # Fix integer floor number
+                if room.floor != correct:
+                    fixed.append(f"Room {room.number}: Floor {room.floor} → {correct}")
+                    room.floor = correct
+                
+                # Fix floor_id relationship
+                correct_id = floors.get(correct)
+                if correct_id and room.floor_id != correct_id:
+                    room.floor_id = correct_id
+                    fixed.append(f"Room {room.number}: floor_id → {correct_id}")
+        except:
             continue
-        first = num[0].upper()
-        if first == 'G':
-            correct = 0
-        elif first.isdigit():
-            correct = int(first)
-        else:
-            continue
-        if room.floor != correct:
-            fixed.append(f"Room {room.number}: {room.floor} → {correct}")
-            room.floor = correct
+            
     db.session.commit()
-    return jsonify({"fixed": fixed, "count": len(fixed)}), 200
+    return jsonify({"message": "Fixed room floor mappings", "details": fixed}), 200
+

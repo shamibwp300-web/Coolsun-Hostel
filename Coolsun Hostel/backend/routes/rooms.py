@@ -229,8 +229,12 @@ def save_bulk_config(floor_id):
         floor.bulk_tenant_id = None
         floor.bulk_rent_amount = None
         floor.bulk_security_deposit = None
-        
-    for room in floor.rooms:
+    # Robust Room Update:
+    # Instead of relying solely on floor.rooms relationship (which might be broken if floor_id is null),
+    # we query all rooms that have this floor number.
+    all_rooms_on_this_floor = Room.query.filter_by(floor=floor.floor_number, deleted_at=None).all()
+    
+    for room in all_rooms_on_this_floor:
         if room.id in selected_room_ids:
             room.is_bulk_rented = True
         else:
