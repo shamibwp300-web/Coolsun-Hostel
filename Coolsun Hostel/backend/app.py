@@ -90,6 +90,33 @@ def create_app():
                         pass
         # ------------------------------------
         
+        # ─── AUTO DATA REPAIR (Floor Linkage Fix) ───
+        try:
+            from backend.models import Floor, Room
+            # Ensure Standard Floors Exist
+            floor_defs = [(0, "Ground Floor"), (1, "First Floor"), (2, "Second Floor"), (3, "Third Floor")]
+            f_map = {}
+            for n, nm in floor_defs:
+                f = Floor.query.filter_by(floor_number=n).first()
+                if not f:
+                    f = Floor(floor_number=n, name=nm)
+                    db.session.add(f)
+                    db.session.flush()
+                f_map[n] = f.id
+            
+            # Link all Rooms to Floor IDs if missing
+            rooms_to_fix = Room.query.filter((Room.floor_id == None)).all()
+            for r in rooms_to_fix:
+                if r.floor in f_map:
+                    r.floor_id = f_map[r.floor]
+            
+            db.session.commit()
+            print("✅ AUTO-REPAIR: Floor Linkage Synchronized.")
+        except Exception as e:
+            print(f"⚠️ Auto-Repair Warning: {str(e)}")
+            db.session.rollback()
+        # ------------------------------------
+        
         from backend.models import User
         
         # 1. Default Admin

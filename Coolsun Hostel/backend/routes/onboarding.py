@@ -76,9 +76,14 @@ def create_tenant():
         # Identify Parent Tenant
         parent_id_raw = data.get('parent_tenant_id')
         parent_tenant_id = None
-        if parent_id_raw and parent_id_raw not in ('null', '', 'select'):
+        if parent_id_raw and parent_id_raw not in ('null', '', 'select', 'bulk'):
             try: parent_tenant_id = int(parent_id_raw)
             except ValueError: pass
+            
+        # 🛡️ ROBUST BULK PARENTING
+        # If room is bulk rented, and we still don't have a parent, use the floor's bulk owner
+        if not parent_tenant_id and floor and floor.is_bulk_rented:
+            parent_tenant_id = floor.bulk_tenant_id
 
         # Create Tenant
         tenant = Tenant(

@@ -186,7 +186,7 @@ const BulkRenting = () => {
                     <input 
                       type="number"
                       placeholder="e.g. 60000"
-                      value={bulkConfig.bulk_rent_amount}
+                      value={bulkConfig.bulk_rent_amount || ''}
                       onChange={e => setBulkConfig({...bulkConfig, bulk_rent_amount: e.target.value})}
                       className="glass-input w-full h-12 pl-12 pr-4 rounded-xl text-green-400 font-bold"
                     />
@@ -200,7 +200,7 @@ const BulkRenting = () => {
                     <input 
                       type="number"
                       placeholder="e.g. 150000"
-                      value={bulkConfig.bulk_security_deposit}
+                      value={bulkConfig.bulk_security_deposit || ''}
                       onChange={e => setBulkConfig({...bulkConfig, bulk_security_deposit: e.target.value})}
                       className="glass-input w-full h-12 pl-12 pr-4 rounded-xl text-purple-400 font-bold"
                     />

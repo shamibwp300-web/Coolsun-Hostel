@@ -128,7 +128,7 @@ const Wizard = () => {
           roomTotalRent: 0,
           rent: 0, 
           tenancyType: 'Shared',
-          parentTenantId: room.bulk_tenant_id ? room.bulk_tenant_id.toString() : '' 
+          parentTenantId: room.bulk_tenant_id ? room.bulk_tenant_id.toString() : 'bulk' 
       });
       fetchRoomTenants(room.id);
       nextStep();
@@ -392,19 +392,31 @@ const Wizard = () => {
                   <label className="text-xs font-medium uppercase tracking-wider text-yellow-500 flex items-center">
                     <AlertCircle size={14} className="mr-1" /> Select Primary Roommate
                   </label>
-                  <select
-                    value={formData.parentTenantId === 'select' ? '' : formData.parentTenantId}
-                    onChange={(e) => setFormData({ ...formData, parentTenantId: e.target.value })}
-                    className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40 border-yellow-500/30 focus:border-yellow-500/50"
-                  >
-                    <option value="" disabled>-- Choose Primary Holder --</option>
-                    {roomTenants.map(t => (
-                      <option key={t.id} value={t.id}>{t.name} (Bed: {t.bed_label || 'N/A'})</option>
-                    ))}
-                    {roomTenants.length === 0 && (
-                      <option value="" disabled>No existing tenants in this room. You must be Primary.</option>
-                    )}
-                  </select>
+                  {/* Special Handle for Bulk Rented Rooms */}
+                  {liveRooms.find(r => r.id === formData.roomId)?.is_bulk_rented ? (
+                    <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                      <p className="text-sm font-bold text-purple-400">
+                        Room is under Bulk Agreement
+                      </p>
+                      <p className="text-xs text-white/60 mt-1">
+                        Rent and security are covered by the Bulk Owner. This tenant will be registered as a sub-tenant.
+                      </p>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.parentTenantId === 'select' ? '' : formData.parentTenantId}
+                      onChange={(e) => setFormData({ ...formData, parentTenantId: e.target.value })}
+                      className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40 border-yellow-500/30 focus:border-yellow-500/50"
+                    >
+                      <option value="" disabled>-- Choose Primary Holder --</option>
+                      {roomTenants.map(t => (
+                        <option key={t.id} value={t.id}>{t.name} (Bed: {t.bed_label || 'N/A'})</option>
+                      ))}
+                      {roomTenants.length === 0 && (
+                        <option value="" disabled>No existing tenants in this room. You must be Primary.</option>
+                      )}
+                    </select>
+                  )}
                 </div>
               )}
             </div>
