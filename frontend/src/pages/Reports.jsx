@@ -16,7 +16,8 @@ const mockComplianceData = [
 
 const Reports = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('financials');
+  const [activeTab, setActiveTab] = useState('Overview');
+  const [expenseTypeFilter, setExpenseTypeFilter] = useState('All');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -148,7 +149,20 @@ const Reports = () => {
 
                 {/* Detailed Expense Table */}
                 <div className="mt-12 overflow-hidden">
-                  <h3 className="text-lg font-bold text-white mb-6">Detailed Expense Summary</h3>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h3 className="text-lg font-bold text-white">Detailed Expense Summary</h3>
+                    <div className="flex bg-white/5 p-1 rounded-lg">
+                      {['All', 'Business', 'Personal'].map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setExpenseTypeFilter(f)}
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${expenseTypeFilter === f ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white'}`}
+                        >
+                          {f === 'Personal' ? 'Owner' : f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="border-b border-white/10 text-white/40 text-[10px] uppercase tracking-wider">
@@ -160,8 +174,8 @@ const Reports = () => {
                         </tr>
                       </thead>
                       <tbody className="text-white/80 divide-y divide-white/5">
-                        {data?.financials?.recent_expenses?.length > 0 ? (
-                          data.financials.recent_expenses.map((exp, i) => (
+                        {data?.financials?.recent_expenses?.filter(e => expenseTypeFilter === 'All' || e.type === expenseTypeFilter).length > 0 ? (
+                          data.financials.recent_expenses.filter(e => expenseTypeFilter === 'All' || e.type === expenseTypeFilter).map((exp, i) => (
                             <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
                               <td className="py-4">
                                 <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase ${exp.type === 'Business' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>

@@ -70,7 +70,7 @@ def get_dashboard_summary():
             "description": e.description,
             "amount": float(e.amount),
             "category": e.category,
-            "type": e.type,
+            "type": 'Personal' if 'Personal' in (e.category or '') or 'Withdrawal' in (e.category or '') else 'Business',
             "date": e.date.strftime('%Y-%m-%d') if e.date else "N/A"
         } for e in recent_exps_raw]
         

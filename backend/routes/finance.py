@@ -119,6 +119,41 @@ def handle_expenses():
         })
     return jsonify(res), 200
 
+@finance_bp.route('/finance/expenses/<int:expense_id>', methods=['PUT', 'DELETE'])
+def manage_expense(expense_id):
+    expense = Expense.query.get_or_404(expense_id)
+    
+    if request.method == 'DELETE':
+        expense.delete() # Soft delete helper from models
+        db.session.commit()
+        return jsonify({"message": "Expense deleted"}), 200
+        
+    if request.method == 'PUT':
+        data = request.json
+        if 'amount' in data:
+            expense.amount = data.get('amount')
+        if 'description' in data:
+            expense.description = data.get('description')
+        if 'category' in data:
+            expense.category = data.get('category')
+        if 'sub_note' in data:
+            expense.sub_note = data.get('sub_note')
+        if 'date' in data:
+            try:
+                # Handle ISO date or simple YYYY-MM-DD
+                dstr = data.get('date').split('T')[0]
+                expense.date = datetime.strptime(dstr, '%Y-%m-%d').date()
+            except:
+                pass
+                
+        if data.get('type') == 'Personal':
+            expense.category = 'Owner Personal'
+        elif data.get('type') == 'Business' and expense.category == 'Owner Personal':
+            expense.category = 'Operational'
+            
+        db.session.commit()
+        return jsonify({"message": "Expense updated"}), 200
+
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
     from backend.models import Floor

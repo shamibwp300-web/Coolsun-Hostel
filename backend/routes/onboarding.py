@@ -144,10 +144,9 @@ def create_tenant():
                 'police_form': 'police_form_url'
             }
             
-            # Ensure specialized directory exists in static folder
-            static_doc_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'documents')
-            if not os.path.exists(static_doc_dir):
-                os.makedirs(static_doc_dir)
+            # Save file to the persistent upload directory
+            static_doc_dir = current_app.config['UPLOAD_FOLDER']
+            os.makedirs(static_doc_dir, exist_ok=True)
 
             if 'police_form' not in files:
                 tenant.compliance_alert = True

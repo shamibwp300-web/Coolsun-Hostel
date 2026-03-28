@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, Download, Plus, CheckCircle, X, Shield } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, Download, Plus, CheckCircle, X, Shield, Edit, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
 const Finance = () => {
@@ -12,6 +12,7 @@ const Finance = () => {
     const [transactions, setTransactions] = useState([]);
     const [expenses, setExpenses] = useState([]);
     const [expenseFilter, setExpenseFilter] = useState('All'); // 'All', 'Business', 'Personal'
+    const [editingExpense, setEditingExpense] = useState(null);
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -113,6 +114,27 @@ const Finance = () => {
             fetchData();
         } catch (e) {
             alert("Error generating rent");
+        }
+    };
+
+    const handleDeleteExpense = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this expense?")) return;
+        try {
+            await axios.delete(`/api/finance/expenses/${id}`);
+            fetchData();
+        } catch (err) {
+            alert("Failed to delete expense");
+        }
+    };
+    
+    const handleUpdateExpense = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.put(`/api/finance/expenses/${editingExpense.id}`, editingExpense);
+            setEditingExpense(null);
+            fetchData();
+        } catch (err) {
+            alert("Failed to update expense");
         }
     };
 
@@ -431,9 +453,25 @@ const Finance = () => {
                             ) : expenses.filter(e => expenseFilter === 'All' || e.type === expenseFilter).map((exp, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b border-white/5 last:border-0 group relative">
                                     <div className="flex-1">
-                                        <div className="flex items-center">
-                                            <p className="text-sm font-medium text-white">{exp.description}</p>
-                                            {exp.type === 'Personal' && <span className="ml-2 px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[8px] font-bold rounded">OWNER PERSONAL</span>}
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center">
+                                                <p className="text-sm font-medium text-white">{exp.description}</p>
+                                                {exp.type === 'Personal' && <span className="ml-2 px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[8px] font-bold rounded">OWNER PERSONAL</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={() => setEditingExpense(exp)}
+                                                    className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-blue-400 transition-colors"
+                                                >
+                                                    <Edit size={12} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteExpense(exp.id)}
+                                                    className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-red-400 transition-colors"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
                                         </div>
                                         <p className="text-xs text-white/40">{exp.category} {exp.note && ` - ${exp.note}`}</p>
                                         <p className="text-[10px] text-white/20 mt-1">{exp.date}</p>
@@ -444,6 +482,67 @@ const Finance = () => {
                         </div>
                     </div>
                 </div>
+                {/* Edit Expense Modal */}
+                <AnimatePresence>
+                    {editingExpense && (
+                        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4">
+                            <motion.div 
+                                initial={{ opacity: 0 }} 
+                                animate={{ opacity: 1 }} 
+                                exit={{ opacity: 0 }}
+                                onClick={() => setEditingExpense(null)}
+                                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            />
+                            <motion.div 
+                                initial={{ scale: 0.95, opacity: 0 }} 
+                                animate={{ scale: 1, opacity: 1 }} 
+                                exit={{ scale: 0.95, opacity: 0 }}
+                                className="glass-panel w-full max-w-md p-6 relative z-[1002]"
+                            >
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-bold text-white">Edit Expense</h3>
+                                    <button onClick={() => setEditingExpense(null)} className="text-white/40 hover:text-white"><X size={20} /></button>
+                                </div>
+                                <form onSubmit={handleUpdateExpense} className="space-y-4">
+                                    <div>
+                                        <label className="text-xs text-white/40 uppercase mb-1 block">Description</label>
+                                        <input 
+                                            type="text" 
+                                            value={editingExpense.description}
+                                            onChange={e => setEditingExpense({...editingExpense, description: e.target.value})}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs text-white/40 uppercase mb-1 block">Amount</label>
+                                            <input 
+                                                type="number" 
+                                                value={editingExpense.amount}
+                                                onChange={e => setEditingExpense({...editingExpense, amount: e.target.value})}
+                                                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-white/40 uppercase mb-1 block">Type</label>
+                                            <select 
+                                                value={editingExpense.type}
+                                                onChange={e => setEditingExpense({...editingExpense, type: e.target.value})}
+                                                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500 appearance-none"
+                                            >
+                                                <option value="Business">Business</option>
+                                                <option value="Personal">Owner/Personal</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold transition-all mt-4">
+                                        Update Expense
+                                    </button>
+                                </form>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );

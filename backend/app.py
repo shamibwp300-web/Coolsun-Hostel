@@ -14,6 +14,12 @@ load_dotenv()
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 _DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'hostel.db'))
 
+# Persistent Upload Folder (Docker Volume mapping)
+# Prioritize /app/uploads if it exists (Prod/Coolify environment)
+_PERSISTENT_UPLOAD_BASE = "/app/uploads" if os.path.exists("/app/uploads") else os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+_UPLOAD_DIR = os.path.join(_PERSISTENT_UPLOAD_BASE, 'documents')
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+
 def create_app():
     # Configure Flask to serve static files from the React dist folder securely
     _FRONTEND_DIST = os.path.abspath(os.path.join(_BASE_DIR, 'frontend', 'dist'))
@@ -30,6 +36,7 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = supabase_url or f'sqlite:///{_DB_PATH}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
+    app.config['UPLOAD_FOLDER'] = _UPLOAD_DIR
     
     # ─── Production Security ─────────────────────────────────────────────────────
     app.config['SESSION_COOKIE_SECURE'] = True
@@ -100,13 +107,10 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api')
 
     # ─── Static Files for Uploads ──────────────────────────────────────────────
-    @app.route('/static/uploads/documents/<path:filename>')
     @app.route('/api/docs/<path:filename>')
     def serve_uploaded_docs(filename):
-        # Serve from the backend's static folder
-        # root_path identifies the 'backend' folder
-        doc_dir = os.path.join(app.root_path, 'static', 'uploads', 'documents')
-        return send_from_directory(doc_dir, filename)
+        # Serve from the persistent upload directory
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # ─── SPA Fallback Route ─────────────────────────────────────────────────────
     @app.route('/', defaults={'path': ''})

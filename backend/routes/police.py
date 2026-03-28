@@ -98,8 +98,8 @@ def upload_police_form(tenant_id):
         return jsonify({"error": "Invalid document type"}), 400
         
     if file and allowed_file(file.filename):
-        # Create base upload dir dynamically in static folder
-        base_dir = os.path.join(current_app.root_path, 'static', UPLOAD_FOLDER)
+        # Save file to the persistent upload directory
+        base_dir = current_app.config['UPLOAD_FOLDER']
         os.makedirs(base_dir, exist_ok=True)
         
         # Use a more descriptive filename based on type
