@@ -99,6 +99,7 @@ const Reports = () => {
           ) : (
             <>
               {activeTab === 'financials' && (
+                <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
                     <h3 className="text-lg font-bold text-white mb-6">Expense Breakdown</h3>
@@ -181,6 +182,7 @@ const Reports = () => {
                     </table>
                   </div>
                 </div>
+                </>
               )}
 
           {activeTab === 'occupancy' && (
