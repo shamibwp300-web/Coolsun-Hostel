@@ -297,7 +297,13 @@ const PoliceVerification = () => {
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     {/* Police Form Section */}
                                     <div className="space-y-3">
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest block">Police Verification Form</label>
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest block">Police Verification Form</label>
+                                            <label htmlFor="police-doc-upload" className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase cursor-pointer flex items-center gap-1 transition-colors">
+                                                {uploading ? <Clock size={10} className="animate-spin" /> : <Upload size={10} />}
+                                                {selectedTenant.document_url ? 'Replace' : 'Upload'}
+                                            </label>
+                                        </div>
                                         {selectedTenant.document_url ? (
                                             <div className="aspect-[3/4] rounded-lg border border-white/10 bg-white/5 flex items-center justify-center p-2 relative group overflow-hidden">
                                                 {selectedTenant.document_url.endsWith('.pdf') ?

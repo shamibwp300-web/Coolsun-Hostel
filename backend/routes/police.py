@@ -17,7 +17,8 @@ def allowed_file(filename):
 def fix_doc_url(url):
     if not url: return None
     # Ensure it uses the new /api/docs path for reliability
-    if '/uploads/documents/' in url:
+    # Matches /uploads/documents/, static/uploads/documents/, or /static/uploads/documents/
+    if 'documents/' in url:
         filename = url.split('/')[-1]
         return f"/api/docs/{filename}"
     return url
