@@ -99,11 +99,12 @@ def create_app():
     app.register_blueprint(admin_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')
 
-    # ─── Debug Routes ──────────────────────────────────────────────────────────
-    @app.route('/api/debug/ping')
-    def ping():
-        db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
-        return jsonify({"status": "Online", "database": db_type}), 200
+    # ─── Static Files for Uploads ──────────────────────────────────────────────
+    @app.route('/static/uploads/documents/<path:filename>')
+    def serve_uploaded_docs(filename):
+        # Serve from the backend's static folder
+        doc_dir = os.path.join(app.root_path, 'static', 'uploads', 'documents')
+        return send_from_directory(doc_dir, filename)
 
     # ─── SPA Fallback Route ─────────────────────────────────────────────────────
     @app.route('/', defaults={'path': ''})
