@@ -101,8 +101,10 @@ def create_app():
 
     # ─── Static Files for Uploads ──────────────────────────────────────────────
     @app.route('/static/uploads/documents/<path:filename>')
+    @app.route('/api/docs/<path:filename>')
     def serve_uploaded_docs(filename):
         # Serve from the backend's static folder
+        # root_path identifies the 'backend' folder
         doc_dir = os.path.join(app.root_path, 'static', 'uploads', 'documents')
         return send_from_directory(doc_dir, filename)
 

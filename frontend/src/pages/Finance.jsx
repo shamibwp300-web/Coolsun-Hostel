@@ -11,6 +11,7 @@ const Finance = () => {
     const [summary, setSummary] = useState({ current_collected: 0, current_pending: 0 });
     const [transactions, setTransactions] = useState([]);
     const [expenses, setExpenses] = useState([]);
+    const [expenseFilter, setExpenseFilter] = useState('All'); // 'All', 'Business', 'Personal'
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -390,13 +391,29 @@ const Finance = () => {
                 {/* Right: Expense Log */}
                 <div className="space-y-6">
                     <div className="glass-panel p-6 rounded-xl border-l-4 border-red-500">
-                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                            <TrendingDown className="mr-2 text-red-400" /> Expense Log
-                        </h3>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                            <h3 className="text-lg font-semibold text-white flex items-center">
+                                <TrendingDown className="mr-2 text-red-400" /> Expense Log
+                            </h3>
+                            <div className="flex bg-white/5 p-1 rounded-xl">
+                                {['All', 'Business', 'Personal'].map(f => (
+                                    <button
+                                        key={f}
+                                        onClick={() => setExpenseFilter(f)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${expenseFilter === f ? 'bg-red-500 text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        {f === 'Personal' ? 'Owner' : f}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="flex justify-between items-center bg-white/5 p-4 rounded-lg mb-6">
                             <div>
-                                <p className="text-xs uppercase text-white/40">Total Logged</p>
-                                <p className="text-2xl font-bold text-white">Rs. {totalExpenses.toLocaleString()}</p>
+                                <p className="text-xs uppercase text-white/40">{expenseFilter} Total</p>
+                                <p className="text-2xl font-bold text-white">
+                                    Rs. {expenses.filter(e => expenseFilter === 'All' || e.type === expenseFilter).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}
+                                </p>
                             </div>
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
@@ -409,9 +426,9 @@ const Finance = () => {
                         </div>
 
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                            {expenses.length === 0 ? (
-                                <p className="text-white/30 text-center py-4 text-sm">No expenses logged.</p>
-                            ) : expenses.map((exp, i) => (
+                            {expenses.filter(e => expenseFilter === 'All' || e.type === expenseFilter).length === 0 ? (
+                                <p className="text-white/30 text-center py-4 text-sm">No {expenseFilter.toLowerCase()} expenses logged.</p>
+                            ) : expenses.filter(e => expenseFilter === 'All' || e.type === expenseFilter).map((exp, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b border-white/5 last:border-0 group relative">
                                     <div className="flex-1">
                                         <div className="flex items-center">

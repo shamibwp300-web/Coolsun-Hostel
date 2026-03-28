@@ -14,6 +14,14 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def fix_doc_url(url):
+    if not url: return None
+    # Ensure it uses the new /api/docs path for reliability
+    if '/uploads/documents/' in url:
+        filename = url.split('/')[-1]
+        return f"/api/docs/{filename}"
+    return url
+
 @police_bp.route('/police/records', methods=['GET'])
 def get_police_records():
     tenants = Tenant.query.all()
@@ -35,10 +43,10 @@ def get_police_records():
             "father_name": t.father_name,
             "permanent_address": t.permanent_address,
             "police_station": t.police_station,
-            "document_url": t.police_form_url,
-            "police_form_url": t.police_form_url,
-            "id_card_front_url": t.id_card_front_url,
-            "id_card_back_url": t.id_card_back_url,
+            "document_url": fix_doc_url(t.police_form_url),
+            "police_form_url": fix_doc_url(t.police_form_url),
+            "id_card_front_url": fix_doc_url(t.id_card_front_url),
+            "id_card_back_url": fix_doc_url(t.id_card_back_url),
             "submitted_at": t.police_form_submitted.isoformat() if t.police_form_submitted else None
         })
         
@@ -103,7 +111,7 @@ def upload_police_form(tenant_id):
         try:
             file.save(file_path)
             # URL to access from frontend
-            file_url = f"/static/{UPLOAD_FOLDER}/{filename}"
+            file_url = f"/api/docs/{filename}"
             
             # Deactivate previous docs of same type
             old_docs = Document.query.filter_by(tenant_id=tenant_id, type=doc_type, deleted_at=None).all()

@@ -144,6 +144,43 @@ const Reports = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Detailed Expense Table */}
+                <div className="mt-12 overflow-hidden">
+                  <h3 className="text-lg font-bold text-white mb-6">Detailed Expense Summary</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="border-b border-white/10 text-white/40 text-[10px] uppercase tracking-wider">
+                        <tr>
+                          <th className="pb-4 font-medium">Type</th>
+                          <th className="pb-4 font-medium">Description</th>
+                          <th className="pb-4 font-medium">Category</th>
+                          <th className="pb-4 font-medium text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-white/80 divide-y divide-white/5">
+                        {data?.financials?.recent_expenses?.length > 0 ? (
+                          data.financials.recent_expenses.map((exp, i) => (
+                            <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
+                              <td className="py-4">
+                                <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase ${exp.type === 'Business' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                  {exp.type === 'Personal' ? 'Owner' : exp.type}
+                                </span>
+                              </td>
+                              <td className="py-4 text-sm font-medium">{exp.description}</td>
+                              <td className="py-4 text-white/40 text-xs">{exp.category}</td>
+                              <td className="py-4 text-right font-mono font-bold text-red-400">Rs. {Number(exp.amount).toLocaleString()}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className="py-8 text-center text-white/20 italic">No recent expenses found.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
 
           {activeTab === 'occupancy' && (

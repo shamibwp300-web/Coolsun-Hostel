@@ -19,6 +19,7 @@ def get_dashboard_summary():
     legacy_arrears = 0.0
     current_expenses = 0.0
     expense_breakdown = []
+    recent_expenses = []
     net_cash = 0.0
     compliance_counts = {'NORMAL': 0, 'WARNING': 0, 'CRITICAL': 0, 'VERIFIED': 0}
     open_issues = []
@@ -62,6 +63,17 @@ def get_dashboard_summary():
         
         current_expenses = sum(item.total for item in expense_data) or 0.0
         expense_breakdown = [{"name": item.category, "value": float(item.total)} for item in expense_data]
+        
+        # Add individual recent expenses for reporting
+        recent_exps_raw = Expense.query.filter_by(deleted_at=None).order_by(Expense.date.desc(), Expense.id.desc()).limit(50).all()
+        recent_expenses = [{
+            "description": e.description,
+            "amount": float(e.amount),
+            "category": e.category,
+            "type": e.type,
+            "date": e.date.strftime('%Y-%m-%d') if e.date else "N/A"
+        } for e in recent_exps_raw]
+        
         net_cash = float(current_collected) - float(current_expenses)
     except Exception as e:
         print(f"Error fetching Financial Stats: {e}")
@@ -156,6 +168,7 @@ def get_dashboard_summary():
             "legacy_arrears": float(legacy_arrears),
             "current_expenses": float(current_expenses),
             "expense_breakdown": expense_breakdown,
+            "recent_expenses": recent_expenses,
             "net_cash": float(net_cash)
         },
         "compliance": compliance_counts,

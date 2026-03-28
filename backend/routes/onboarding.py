@@ -167,7 +167,7 @@ def create_tenant():
                     file_path = os.path.join(static_doc_dir, filename)
                     
                     # URL for frontend access
-                    db_url = f"/static/uploads/documents/{filename}"
+                    db_url = f"/api/docs/{filename}"
                     
                     # Save File
                     file.save(file_path)
@@ -189,7 +189,7 @@ def create_tenant():
                     file_path = os.path.join(static_doc_dir, filename)
                     file.save(file_path)
                     saved_files.append(file_path)
-                    doc = Document(tenant_id=tenant.id, type='Agreement', url=f"/static/uploads/documents/{filename}")
+                    doc = Document(tenant_id=tenant.id, type='Agreement', url=f"/api/docs/{filename}")
                     db.session.add(doc)
 
         # Commit only if everything succeeded
