@@ -491,23 +491,33 @@ const Finance = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-white/5 p-4 rounded-lg">
                                 <p className="text-xs uppercase text-white/40">Total Collected</p>
-                                <p className="text-2xl font-bold text-green-400">Rs. {Number(summary?.current_collected || 0).toLocaleString()}</p>
+                                <p className="text-xl font-bold text-green-400 truncate" title={`${Number(summary?.current_collected || 0).toLocaleString()}`}>
+                                    <span className="text-xs mr-1 opacity-60">Rs.</span>{Number(summary?.current_collected || 0).toLocaleString()}
+                                </p>
                             </div>
                             <div className="bg-white/5 p-4 rounded-lg border-l-2 border-orange-500/50">
                                 <p className="text-xs uppercase text-white/40">Current Pending</p>
-                                <p className="text-2xl font-bold text-orange-400">Rs. {Number(summary?.current_pending || 0).toLocaleString()}</p>
+                                <p className="text-xl font-bold text-orange-400 truncate" title={`${Number(summary?.current_pending || 0).toLocaleString()}`}>
+                                    <span className="text-xs mr-1 opacity-60">Rs.</span>{Number(summary?.current_pending || 0).toLocaleString()}
+                                </p>
                             </div>
                             <div className="bg-white/5 p-4 rounded-lg border-l-2 border-red-500/50">
                                 <p className="text-xs uppercase text-white/40">Arrears (Older)</p>
-                                <p className="text-2xl font-bold text-red-500">Rs. {Number(summary?.legacy_arrears || 0).toLocaleString()}</p>
+                                <p className="text-xl font-bold text-red-500 truncate" title={`${Number(summary?.legacy_arrears || 0).toLocaleString()}`}>
+                                    <span className="text-xs mr-1 opacity-60">Rs.</span>{Number(summary?.legacy_arrears || 0).toLocaleString()}
+                                </p>
                             </div>
                             <div className="bg-white/5 p-4 rounded-lg border border-red-500/20">
                                 <p className="text-xs uppercase text-white/40 font-bold text-red-400">Total Expenses</p>
-                                <p className="text-2xl font-bold text-white">Rs. {Number(summary?.current_expenses || 0).toLocaleString()}</p>
+                                <p className="text-xl font-bold text-white truncate" title={`${Number(summary?.current_expenses || 0).toLocaleString()}`}>
+                                    <span className="text-xs mr-1 opacity-60">Rs.</span>{Number(summary?.current_expenses || 0).toLocaleString()}
+                                </p>
                             </div>
                             <div className="bg-white/5 p-4 rounded-lg border border-green-500/20">
                                 <p className="text-xs uppercase text-white/40 font-bold text-green-400">Net Cash in Hand</p>
-                                <p className="text-2xl font-bold text-white">Rs. {Number(summary?.net_cash || 0).toLocaleString()}</p>
+                                <p className="text-xl font-bold text-white truncate" title={`${Number(summary?.net_cash || 0).toLocaleString()}`}>
+                                    <span className="text-xs mr-1 opacity-60">Rs.</span>{Number(summary?.net_cash || 0).toLocaleString()}
+                                </p>
                             </div>
                         </div>
                     </div>
