@@ -15,6 +15,9 @@ const Finance = () => {
     const [expenseSearch, setExpenseSearch] = useState('');
     const [expenseStartDate, setExpenseStartDate] = useState('');
     const [expenseEndDate, setExpenseEndDate] = useState('');
+    const [revenueStartDate, setRevenueStartDate] = useState('');
+    const [revenueEndDate, setRevenueEndDate] = useState('');
+    const [revenuePreset, setRevenuePreset] = useState('All-Time'); // 'Today', 'Week', 'Month', 'All-Time'
     const [editingExpense, setEditingExpense] = useState(null);
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -56,8 +59,12 @@ const Finance = () => {
 
     const fetchData = async () => {
         try {
+            const params = new URLSearchParams();
+            if (revenueStartDate) params.append('start_date', revenueStartDate);
+            if (revenueEndDate) params.append('end_date', revenueEndDate);
+
             const [dashRes, ledgRes, tenRes] = await Promise.all([
-                axios.get('/api/dashboard/summary'),
+                axios.get(`/api/dashboard/summary?${params.toString()}`),
                 axios.get('/api/finance/ledger'),
                 axios.get('/api/tenants')
             ]);
@@ -70,6 +77,30 @@ const Finance = () => {
         }
     };
 
+    const handleRevenuePreset = (preset) => {
+        setRevenuePreset(preset);
+        const today = new Date();
+        let start = '';
+        let end = today.toISOString().split('T')[0];
+
+        if (preset === 'Today') {
+            start = end;
+        } else if (preset === 'Week') {
+            const weekAgo = new Date();
+            weekAgo.setDate(today.getDate() - 7);
+            start = weekAgo.toISOString().split('T')[0];
+        } else if (preset === 'Month') {
+            const firstDay = new Date(today.getFullYear(), today.month, 1);
+            start = firstDay.toISOString().split('T')[0];
+        } else if (preset === 'All-Time') {
+            start = '';
+            end = '';
+        }
+
+        setRevenueStartDate(start);
+        setRevenueEndDate(end);
+    };
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -77,6 +108,10 @@ const Finance = () => {
     useEffect(() => {
         fetchExpenses();
     }, [expenseFilter, expenseStartDate, expenseEndDate]);
+
+    useEffect(() => {
+        fetchData();
+    }, [revenueStartDate, revenueEndDate]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -395,9 +430,53 @@ const Finance = () => {
                 {/* Left: Revenue Stream */}
                 <div className="space-y-6">
                     <div className="glass-panel p-6 rounded-xl border-l-4 border-blue-500">
-                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                            <TrendingUp className="mr-2 text-blue-400" /> Revenue Stream
-                        </h3>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                            <h3 className="text-lg font-semibold text-white flex items-center">
+                                <TrendingUp className="mr-2 text-blue-400" /> Revenue Stream
+                            </h3>
+                            <div className="flex bg-white/5 p-1 rounded-lg">
+                                {['Today', 'Week', 'Month', 'All-Time'].map(p => (
+                                    <button
+                                        key={p}
+                                        onClick={() => handleRevenuePreset(p)}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${revenuePreset === p ? 'bg-blue-500 text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Custom Date Range for Revenue */}
+                        {revenuePreset === 'All-Time' && (
+                            <div className="grid grid-cols-2 gap-4 mb-6 bg-white/5 p-3 rounded-lg border border-white/5">
+                                <div>
+                                    <label className="text-[10px] uppercase text-white/30 font-bold mb-1 block ml-1">From</label>
+                                    <input 
+                                        type="date" 
+                                        value={revenueStartDate}
+                                        onChange={(e) => {
+                                            setRevenueStartDate(e.target.value);
+                                            setRevenuePreset('Custom');
+                                        }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500/50 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase text-white/30 font-bold mb-1 block ml-1">To</label>
+                                    <input 
+                                        type="date" 
+                                        value={revenueEndDate}
+                                        onChange={(e) => {
+                                            setRevenueEndDate(e.target.value);
+                                            setRevenuePreset('Custom');
+                                        }}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500/50 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-white/5 p-4 rounded-lg">
                                 <p className="text-xs uppercase text-white/40">Total Collected</p>

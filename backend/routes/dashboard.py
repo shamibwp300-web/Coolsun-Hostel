@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from backend.models import db, Room, Tenant, Ledger, MaintenanceRequest, MeterReading, WaterBill, InternetBill
 from sqlalchemy import func
 from datetime import datetime
@@ -9,6 +9,17 @@ dashboard_bp = Blueprint('dashboard', __name__)
 def get_dashboard_summary():
     today = datetime.utcnow()
     start_of_month = datetime(today.year, today.month, 1)
+
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    start_date_filter = None
+    end_date_filter = None
+    if start_date_str:
+        try: start_date_filter = datetime.strptime(start_date_str, '%Y-%m-%d')
+        except: pass
+    if end_date_str:
+        try: end_date_filter = datetime.strptime(end_date_str, '%Y-%m-%d')
+        except: pass
 
     # Defaults in case of failure
     total_capacity = 0
@@ -35,37 +46,51 @@ def get_dashboard_summary():
     except Exception as e:
         print(f"Error fetching Occupancy Stats: {e}")
 
-    # 2. Financial Stats (All-Time Liquidity/Cash Flow Reconciliation)
+    # 2. Financial Stats (Filtered if dates provided)
     try:
-        # Collected (All-time)
-        current_collected = db.session.query(func.sum(Ledger.amount)).filter(
+        # Base queries
+        collected_query = db.session.query(func.coalesce(func.sum(Ledger.amount), 0.0)).filter(
             Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE']),
             Ledger.status == 'PAID',
             Ledger.deleted_at == None
-        ).scalar() or 0.0
-
-        # Pending: All PENDING rent (Current + Arrears)
-        current_pending = db.session.query(func.coalesce(func.sum(Ledger.amount), 0.0)).filter(
+        )
+        
+        pending_query = db.session.query(func.coalesce(func.sum(Ledger.amount), 0.0)).filter(
             Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE']),
             Ledger.status == 'PENDING',
             Ledger.deleted_at == None
-        ).scalar() or 0.0
-
-        # Legacy Arrears: (Keeping this at 0 for now as current_pending sums all)
-        legacy_arrears = 0.0
-
-        # Expenses (All-time)
+        )
+        
         from backend.models import Expense
-        expense_data = db.session.query(
+        expense_query = db.session.query(
             Expense.category, 
             func.sum(Expense.amount).label('total')
-        ).filter(Expense.deleted_at == None).group_by(Expense.category).all()
+        ).filter(Expense.deleted_at == None)
+
+        # Apply Date Filters
+        if start_date_filter:
+            collected_query = collected_query.filter(Ledger.timestamp >= start_date_filter)
+            pending_query = pending_query.filter(Ledger.timestamp >= start_date_filter)
+            expense_query = expense_query.filter(Expense.date >= start_date_filter.date())
+        if end_date_filter:
+            end_of_day = end_date_filter.replace(hour=23, minute=59, second=59)
+            collected_query = collected_query.filter(Ledger.timestamp <= end_of_day)
+            pending_query = pending_query.filter(Ledger.timestamp <= end_of_day)
+            expense_query = expense_query.filter(Expense.date <= end_date_filter.date())
+
+        current_collected = collected_query.scalar() or 0.0
+        current_pending = pending_query.scalar() or 0.0
         
+        expense_data = expense_query.group_by(Expense.category).all()
         current_expenses = sum(item.total for item in expense_data) or 0.0
         expense_breakdown = [{"name": item.category, "value": float(item.total)} for item in expense_data]
         
-        # Add individual recent expenses for reporting
-        recent_exps_raw = Expense.query.filter_by(deleted_at=None).order_by(Expense.date.desc(), Expense.id.desc()).limit(50).all()
+        # Add individual recent expenses (limited context for filtered view)
+        recent_exp_query = Expense.query.filter_by(deleted_at=None)
+        if start_date_filter: recent_exp_query = recent_exp_query.filter(Expense.date >= start_date_filter.date())
+        if end_date_filter: recent_exp_query = recent_exp_query.filter(Expense.date <= end_date_filter.date())
+        recent_exps_raw = recent_exp_query.order_by(Expense.date.desc(), Expense.id.desc()).limit(50).all()
+
         recent_expenses = [{
             "description": e.description,
             "amount": float(e.amount),
@@ -82,7 +107,8 @@ def get_dashboard_summary():
     try:
         tenants = Tenant.query.filter_by(deleted_at=None).all()
         for t in tenants:
-            status = t.get_compliance_status()
+            c_data = t.get_compliance_status()
+            status = c_data.get('status', 'NORMAL')
             if status in compliance_counts:
                 compliance_counts[status] += 1
     except Exception as e:
