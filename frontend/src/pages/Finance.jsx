@@ -448,8 +448,8 @@ const Finance = () => {
                         </div>
 
                         {/* Custom Date Range for Revenue */}
-                        {revenuePreset === 'All-Time' && (
-                            <div className="grid grid-cols-2 gap-4 mb-6 bg-white/5 p-3 rounded-lg border border-white/5">
+                        {(revenuePreset === 'All-Time' || revenuePreset === 'Custom') && (
+                            <div className="grid grid-cols-2 gap-4 mb-6 bg-white/5 p-3 rounded-lg border border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <div>
                                     <label className="text-[10px] uppercase text-white/30 font-bold mb-1 block ml-1">From</label>
                                     <input 
@@ -459,7 +459,7 @@ const Finance = () => {
                                             setRevenueStartDate(e.target.value);
                                             setRevenuePreset('Custom');
                                         }}
-                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500/50 outline-none transition-all"
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500/50 outline-none transition-all placeholder:text-white/20"
                                     />
                                 </div>
                                 <div>
@@ -471,7 +471,7 @@ const Finance = () => {
                                             setRevenueEndDate(e.target.value);
                                             setRevenuePreset('Custom');
                                         }}
-                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500/50 outline-none transition-all"
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500/50 outline-none transition-all placeholder:text-white/20"
                                     />
                                 </div>
                             </div>
