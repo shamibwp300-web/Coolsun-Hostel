@@ -101,6 +101,10 @@ const Finance = () => {
         setRevenueEndDate(end);
     };
 
+    const resetRevenueFilters = () => {
+        handleRevenuePreset('All-Time');
+    };
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -444,6 +448,13 @@ const Finance = () => {
                                         {p}
                                     </button>
                                 ))}
+                                <button
+                                    onClick={resetRevenueFilters}
+                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all text-red-400/60 hover:text-red-400 hover:bg-red-400/10 ml-1 border-l border-white/10 pl-3"
+                                    title="Reset Revenue Filters"
+                                >
+                                    Reset
+                                </button>
                             </div>
                         </div>
 
