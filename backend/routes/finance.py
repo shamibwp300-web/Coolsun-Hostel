@@ -89,12 +89,21 @@ def pay_dues():
 def handle_expenses():
     if request.method == 'POST':
         data = request.json
+        # Robust date parsing
+        exp_date = date.today()
+        if 'date' in data:
+            try:
+                dstr = data.get('date').split('T')[0]
+                exp_date = datetime.strptime(dstr, '%Y-%m-%d').date()
+            except:
+                pass
+
         e = Expense(
             category=data.get('category', 'Operational'),
             amount=data.get('amount'),
             description=data.get('description'),
             sub_note=data.get('sub_note'),
-            date=date.today()
+            date=exp_date
         )
         if data.get('type') == 'Personal':
             e.category = 'Owner Personal'
@@ -103,10 +112,37 @@ def handle_expenses():
         db.session.commit()
         return jsonify({"message": "Expense logged"}), 201
         
-    expenses = Expense.query.filter_by(deleted_at=None).order_by(Expense.date.desc()).limit(50).all()
+    # GET logic with filtering
+    query = Expense.query.filter_by(deleted_at=None)
+    
+    # Filter by date range
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    if start_date:
+        try:
+            query = query.filter(Expense.date >= datetime.strptime(start_date, '%Y-%m-%d').date())
+        except: pass
+    if end_date:
+        try:
+            query = query.filter(Expense.date <= datetime.strptime(end_date, '%Y-%m-%d').date())
+        except: pass
+        
+    # Filter by type (Business/Personal)
+    etype = request.args.get('type')
+    if etype == 'Business':
+        query = query.filter(Expense.category != 'Owner Personal')
+    elif etype == 'Personal':
+        query = query.filter(Expense.category == 'Owner Personal')
+        
+    # Filter by search (description)
+    search = request.args.get('search')
+    if search:
+        query = query.filter(Expense.description.ilike(f'%{search}%'))
+        
+    expenses = query.order_by(Expense.date.desc(), Expense.id.desc()).all()
+    
     res = []
     for exp in expenses:
-        # Front-end expects generic "Business" vs "Personal" as `type`
         btype = "Personal" if exp.category == 'Owner Personal' else "Business"
         res.append({
             "id": exp.id,
@@ -114,7 +150,8 @@ def handle_expenses():
             "amount": float(exp.amount),
             "description": exp.description,
             "note": exp.sub_note or "",
-            "date": exp.date.strftime('%b %d, %Y') if exp.date else "N/A",
+            "date": exp.date.strftime('%Y-%m-%d') if exp.date else "N/A", # Return ISO format for easier FE handling
+            "display_date": exp.date.strftime('%b %d, %Y') if exp.date else "N/A",
             "type": btype
         })
     return jsonify(res), 200
@@ -176,7 +213,7 @@ def generate_bulk_rent():
             deleted_at=None
         ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
         
-        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        already_billed = any(e.timestamp and e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
         
         if not already_billed:
             l = Ledger(

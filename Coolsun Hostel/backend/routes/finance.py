@@ -89,11 +89,21 @@ def pay_dues():
 def handle_expenses():
     if request.method == 'POST':
         data = request.json
+        exp_date = None
+        if data.get('date'):
+            try:
+                exp_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+            except:
+                exp_date = date.today()
+        else:
+            exp_date = date.today()
+
         e = Expense(
             category=data.get('category', 'Operational'),
             amount=data.get('amount'),
             description=data.get('description'),
-            sub_note=data.get('sub_note')
+            sub_note=data.get('sub_note'),
+            date=exp_date
         )
         if data.get('type') == 'Personal':
             e.category = 'Owner Personal'
@@ -102,7 +112,7 @@ def handle_expenses():
         db.session.commit()
         return jsonify({"message": "Expense logged"}), 201
         
-    expenses = Expense.query.filter_by(deleted_at=None).order_by(Expense.date.desc()).limit(50).all()
+    expenses = Expense.query.filter_by(deleted_at=None).order_by(Expense.date.desc(), Expense.id.desc()).limit(50).all()
     res = []
     for exp in expenses:
         # Front-end expects generic "Business" vs "Personal" as `type`
@@ -113,10 +123,41 @@ def handle_expenses():
             "amount": float(exp.amount),
             "description": exp.description,
             "note": exp.sub_note or "",
-            "date": exp.date.strftime('%b %d, %Y'),
+            "date": exp.date.strftime('%b %d, %Y') if exp.date else "N/A",
             "type": btype
         })
     return jsonify(res), 200
+
+@finance_bp.route('/finance/expenses/<int:expense_id>', methods=['PUT', 'DELETE'])
+def manage_expense(expense_id):
+    expense = Expense.query.get_or_404(expense_id)
+    
+    if request.method == 'DELETE':
+        expense.deleted_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({"message": "Expense deleted"}), 200
+        
+    if request.method == 'PUT':
+        data = request.json
+        expense.category = data.get('category', expense.category)
+        expense.amount = data.get('amount', expense.amount)
+        expense.description = data.get('description', expense.description)
+        expense.sub_note = data.get('sub_note', expense.sub_note)
+        
+        dstr = data.get('date')
+        if dstr:
+            try:
+                expense.date = datetime.strptime(dstr, '%Y-%m-%d').date()
+            except:
+                pass
+                
+        if data.get('type') == 'Personal':
+            expense.category = 'Owner Personal'
+        elif data.get('type') == 'Business' and expense.category == 'Owner Personal':
+            expense.category = 'Operational'
+            
+        db.session.commit()
+        return jsonify({"message": "Expense updated"}), 200
 
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():

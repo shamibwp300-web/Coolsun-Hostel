@@ -61,7 +61,7 @@ def get_dashboard_summary():
         ).filter(Expense.deleted_at == None).group_by(Expense.category).all()
         
         current_expenses = sum(item.total for item in expense_data) or 0.0
-        expense_breakdown = [{"name": item.category, "value": float(item.total)} for item in expense_data]
+        expense_breakdown = [{"name": item.category if item.category else "Uncategorized", "value": float(item.total)} for item in expense_data]
         net_cash = float(current_collected) - float(current_expenses)
     except Exception as e:
         print(f"Error fetching Financial Stats: {e}")
@@ -103,7 +103,7 @@ def get_dashboard_summary():
                 "type": "Electricity",
                 "room": r.room.number if r.room else "N/A",
                 "date_obj": r.reading_date,
-                "date": r.reading_date.strftime('%b %d'),
+                "date": r.reading_date.strftime('%b %d') if r.reading_date else "N/A",
                 "amount": float(r.total_bill),
                 "units": f"{r.units_consumed} units"
             })
@@ -113,7 +113,7 @@ def get_dashboard_summary():
                 "type": "Water",
                 "room": w.room.number if w.room else "N/A",
                 "date_obj": w.billing_date,
-                "date": w.billing_date.strftime('%b %d'),
+                "date": w.billing_date.strftime('%b %d') if w.billing_date else "N/A",
                 "amount": float(w.amount),
                 "units": "Flat Fee"
             })
@@ -123,12 +123,12 @@ def get_dashboard_summary():
                 "type": "Internet",
                 "room": i.room.number if i.room else "N/A",
                 "date_obj": i.billing_date,
-                "date": i.billing_date.strftime('%b %d'),
+                "date": i.billing_date.strftime('%b %d') if i.billing_date else "N/A",
                 "amount": float(i.amount),
                 "units": "Opt-ins Only"
             })
             
-        electricity_summary.sort(key=lambda x: x['date_obj'], reverse=True)
+        electricity_summary.sort(key=lambda x: x['date_obj'] if x['date_obj'] else datetime.min, reverse=True)
         electricity_summary = electricity_summary[:5]
         
         current_elec = db.session.query(func.sum(MeterReading.total_bill)).filter(

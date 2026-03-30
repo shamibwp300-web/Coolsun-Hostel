@@ -168,8 +168,9 @@ const Reports = () => {
                       <thead className="border-b border-white/10 text-white/40 text-[10px] uppercase tracking-wider">
                         <tr>
                           <th className="pb-4 font-medium">Type</th>
-                          <th className="pb-4 font-medium">Description</th>
-                          <th className="pb-4 font-medium">Category</th>
+                          <th className="pb-4 font-medium text-left">Date</th>
+                          <th className="pb-4 font-medium text-left">Description</th>
+                          <th className="pb-4 font-medium text-left">Category</th>
                           <th className="pb-4 font-medium text-right">Amount</th>
                         </tr>
                       </thead>
@@ -182,6 +183,7 @@ const Reports = () => {
                                   {exp.type === 'Personal' ? 'Owner' : exp.type}
                                 </span>
                               </td>
+                              <td className="py-4 text-xs text-white/50">{exp.date}</td>
                               <td className="py-4 text-sm font-medium">{exp.description}</td>
                               <td className="py-4 text-white/40 text-xs">{exp.category}</td>
                               <td className="py-4 text-right font-mono font-bold text-red-400">Rs. {Number(exp.amount).toLocaleString()}</td>
@@ -189,7 +191,7 @@ const Reports = () => {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="4" className="py-8 text-center text-white/20 italic">No recent expenses found.</td>
+                            <td colSpan="5" className="py-8 text-center text-white/20 italic">No recent expenses found.</td>
                           </tr>
                         )}
                       </tbody>

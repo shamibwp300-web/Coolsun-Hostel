@@ -12,6 +12,9 @@ const Finance = () => {
     const [transactions, setTransactions] = useState([]);
     const [expenses, setExpenses] = useState([]);
     const [expenseFilter, setExpenseFilter] = useState('All'); // 'All', 'Business', 'Personal'
+    const [expenseSearch, setExpenseSearch] = useState('');
+    const [expenseStartDate, setExpenseStartDate] = useState('');
+    const [expenseEndDate, setExpenseEndDate] = useState('');
     const [editingExpense, setEditingExpense] = useState(null);
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -21,7 +24,8 @@ const Finance = () => {
         category: 'Repairs',
         amount: '',
         description: '',
-        subNote: ''
+        subNote: '',
+        date: new Date().toISOString().split('T')[0]
     });
 
     const [paymentForm, setPaymentForm] = useState({
@@ -35,19 +39,32 @@ const Finance = () => {
         balance_type: 'DUE' // 'DUE' or 'ADVANCE'
     });
 
+    const fetchExpenses = async () => {
+        try {
+            const params = new URLSearchParams();
+            if (expenseFilter !== 'All') params.append('type', expenseFilter);
+            if (expenseSearch) params.append('search', expenseSearch);
+            if (expenseStartDate) params.append('start_date', expenseStartDate);
+            if (expenseEndDate) params.append('end_date', expenseEndDate);
+
+            const res = await axios.get(`/api/finance/expenses?${params.toString()}`);
+            setExpenses(res.data);
+        } catch (e) {
+            console.error("Error fetching expenses", e);
+        }
+    };
+
     const fetchData = async () => {
         try {
-            const [dashRes, ledgRes, expRes, tenRes] = await Promise.all([
+            const [dashRes, ledgRes, tenRes] = await Promise.all([
                 axios.get('/api/dashboard/summary'),
                 axios.get('/api/finance/ledger'),
-                axios.get('/api/finance/expenses'),
                 axios.get('/api/tenants')
             ]);
             setSummary(dashRes.data.financials);
-            // Show all ledger records (including PENDING rent invoices)
             setTransactions(ledgRes.data);
-            setExpenses(expRes.data);
             setTenants(tenRes.data);
+            fetchExpenses();
         } catch (e) {
             console.error("Error fetching finance data", e);
         }
@@ -56,6 +73,17 @@ const Finance = () => {
     useEffect(() => {
         fetchData();
     }, []);
+
+    useEffect(() => {
+        fetchExpenses();
+    }, [expenseFilter, expenseStartDate, expenseEndDate]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            fetchExpenses();
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [expenseSearch]);
 
     // Body Scroll Lock for Modal
     useEffect(() => {
@@ -70,7 +98,14 @@ const Finance = () => {
         try {
             await axios.post('/api/finance/expenses', expenseForm);
             setShowExpenseModal(false);
-            setExpenseForm({ type: 'Business', category: 'Repairs', amount: '', description: '', subNote: '' });
+            setExpenseForm({ 
+                type: 'Business', 
+                category: 'Repairs', 
+                amount: '', 
+                description: '', 
+                subNote: '',
+                date: new Date().toISOString().split('T')[0] 
+            });
             fetchData();
         } catch (e) {
             alert("Error logging expense");
@@ -311,11 +346,19 @@ const Finance = () => {
                                     >Owner Withdrawal</button>
                                 </div>
 
-                                <div>
-                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount</label>
-                                    <input type="number" value={expenseForm.amount}
-                                        onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                                        className="glass-input w-full h-12 px-4 rounded-xl text-lg font-mono" placeholder="0.00" />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Date</label>
+                                        <input type="date" value={expenseForm.date}
+                                            onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
+                                            className="glass-input w-full h-12 px-4 rounded-xl text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount</label>
+                                        <input type="number" value={expenseForm.amount}
+                                            onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                                            className="glass-input w-full h-12 px-4 rounded-xl text-lg font-mono" placeholder="0.00" />
+                                    </div>
                                 </div>
 
                                 <div>
@@ -417,34 +460,87 @@ const Finance = () => {
                             <h3 className="text-lg font-semibold text-white flex items-center">
                                 <TrendingDown className="mr-2 text-red-400" /> Expense Log
                             </h3>
-                            <div className="flex bg-white/5 p-1 rounded-xl">
-                                {['All', 'Business', 'Personal'].map(f => (
-                                    <button
-                                        key={f}
-                                        onClick={() => setExpenseFilter(f)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${expenseFilter === f ? 'bg-red-500 text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
-                                    >
-                                        {f === 'Personal' ? 'Owner' : f}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between items-center bg-white/5 p-4 rounded-lg mb-6">
-                            <div>
-                                <p className="text-xs uppercase text-white/40">{expenseFilter} Total</p>
-                                <p className="text-2xl font-bold text-white">
-                                    Rs. {expenses.filter(e => expenseFilter === 'All' || e.type === expenseFilter).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}
-                                </p>
-                            </div>
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => setShowExpenseModal(true)}
-                                className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition-colors flex items-center"
+                                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium shadow-lg shadow-red-500/20 transition-colors flex items-center"
                             >
                                 <Plus size={16} className="mr-1" /> Log Expense
                             </motion.button>
+                        </div>
+
+                        {/* Professional Filters */}
+                        <div className="bg-white/5 p-4 rounded-xl mb-6 border border-white/5 space-y-4">
+                            <div className="flex flex-col md:flex-row gap-4 items-end">
+                                <div className="flex-1 w-full">
+                                    <label className="text-[10px] uppercase text-white/30 font-bold mb-1 block ml-1">Search Description</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            value={expenseSearch}
+                                            onChange={(e) => setExpenseSearch(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && fetchExpenses()}
+                                            placeholder="e.g. Repair, Food..."
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-red-500/50 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 w-full md:w-auto">
+                                    <div>
+                                        <label className="text-[10px] uppercase text-white/30 font-bold mb-1 block ml-1">From</label>
+                                        <input 
+                                            type="date" 
+                                            value={expenseStartDate}
+                                            onChange={(e) => setExpenseStartDate(e.target.value)}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-red-500/50 outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] uppercase text-white/30 font-bold mb-1 block ml-1">To</label>
+                                        <input 
+                                            type="date" 
+                                            value={expenseEndDate}
+                                            onChange={(e) => setExpenseEndDate(e.target.value)}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-red-500/50 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-white/5">
+                                <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
+                                    {['All', 'Business', 'Personal'].map(f => (
+                                        <button
+                                            key={f}
+                                            onClick={() => setExpenseFilter(f)}
+                                            className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${expenseFilter === f ? 'bg-red-500 text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                                        >
+                                            {f === 'Personal' ? 'Owner' : f}
+                                        </button>
+                                    ))}
+                                </div>
+                                
+                                <div className="flex items-center gap-4">
+                                    {(expenseSearch || expenseStartDate || expenseEndDate || expenseFilter !== 'All') && (
+                                        <button 
+                                            onClick={() => {
+                                                setExpenseSearch('');
+                                                setExpenseStartDate('');
+                                                setExpenseEndDate('');
+                                                setExpenseFilter('All');
+                                            }}
+                                            className="text-[10px] font-bold text-white/30 hover:text-red-400 uppercase tracking-widest transition-colors"
+                                        >
+                                            Reset Filters
+                                        </button>
+                                    )}
+                                    <div className="text-right">
+                                        <p className="text-[10px] uppercase text-white/30 font-bold">Filtered Total</p>
+                                        <p className="text-lg font-bold text-white">Rs. {expenses.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
@@ -474,7 +570,7 @@ const Finance = () => {
                                             </div>
                                         </div>
                                         <p className="text-xs text-white/40">{exp.category} {exp.note && ` - ${exp.note}`}</p>
-                                        <p className="text-[10px] text-white/20 mt-1">{exp.date}</p>
+                                        <p className="text-[10px] text-white/20 mt-1">{exp.display_date || exp.date}</p>
                                     </div>
                                     <p className="text-sm font-bold text-red-400">-{exp.amount.toLocaleString()}</p>
                                 </div>
@@ -523,6 +619,17 @@ const Finance = () => {
                                                 className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="text-xs text-white/40 uppercase mb-1 block">Date</label>
+                                            <input 
+                                                type="date" 
+                                                value={editingExpense.date ? (editingExpense.date.includes(',') ? new Date(editingExpense.date).toISOString().split('T')[0] : editingExpense.date) : ''}
+                                                onChange={e => setEditingExpense({...editingExpense, date: e.target.value})}
+                                                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-xs text-white/40 uppercase mb-1 block">Type</label>
                                             <select 
