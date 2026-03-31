@@ -99,7 +99,12 @@ def create_tenant():
             db.session.add(billing)
 
             # 5. Financial Logic (Unified Billing & Security)
-            amount_paid_now = float(data.get('amount_paid_now') or (initial_rent + security_deposit_total))
+            amount_paid_now_raw = data.get('amount_paid_now')
+            if amount_paid_now_raw is not None and str(amount_paid_now_raw).strip() != '':
+                amount_paid_now = float(amount_paid_now_raw)
+            else:
+                amount_paid_now = initial_rent + security_deposit_total
+            
             ledger_rent_type = 'PRIVATE_RENT' if tenancy_type == 'Private' else 'RENT'
 
             # Allocate payments: Rent first, then Security
@@ -109,6 +114,7 @@ def create_tenant():
 
             amount_for_security = min(remaining_paid, security_deposit_total)
             security_pending = security_deposit_total - amount_for_security
+            remaining_paid -= amount_for_security
 
             # Rent Ledger Entries
             if amount_for_rent > 0:
@@ -121,12 +127,17 @@ def create_tenant():
                 db.session.add(Ledger(tenant_id=tenant.id, amount=amount_for_security, type='DEPOSIT', status='PAID', payment_method=payment_method, description='Security Deposit (Paid)'))
             if security_pending > 0:
                 db.session.add(Ledger(tenant_id=tenant.id, amount=security_pending, type='DEPOSIT', status='PENDING', description='Security Deposit Arrears'))
+            
+            # Record any overpayment / pure advance (e.g., bulk tenant or manual extra payment)
+            if remaining_paid > 0:
+                db.session.add(Ledger(tenant_id=tenant.id, amount=remaining_paid, type='DEPOSIT', status='PAID', payment_method=payment_method, description='Initial Advance / Overpayment'))
 
             financials = {
                 "rent": initial_rent,
                 "security": security_deposit_total,
                 "received": amount_paid_now,
-                "arrears": rent_pending + security_pending
+                "arrears": rent_pending + security_pending,
+                "advance": remaining_paid
             }
 
             # 6. Handle Files (Naming Convention: tenantID_docType_timestamp)
