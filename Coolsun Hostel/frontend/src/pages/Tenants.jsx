@@ -10,6 +10,7 @@ const Tenants = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [sortField, setSortField] = useState('name');
     const [sortDir, setSortDir] = useState('asc');
+    const [statusFilter, setStatusFilter] = useState('All'); // All, Active, Late, Inactive
     const [showSortMenu, setShowSortMenu] = useState(false);
     const [editingTenant, setEditingTenant] = useState(null);
     const [roomTenants, setRoomTenants] = useState([]);
@@ -149,11 +150,20 @@ const Tenants = () => {
     };
 
     const filteredTenants = tenants
-        .filter(t =>
-            t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.phone?.includes(searchTerm)
-        )
+        .filter(t => {
+            // Search filter
+            const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                t.phone?.includes(searchTerm);
+            
+            if (!matchesSearch) return false;
+
+            // Status filter
+            if (statusFilter === 'All') return true;
+            if (statusFilter === 'Active') return t.status === 'Active';
+            if (statusFilter === 'Late') return t.status === 'Late' || t.status === 'Inactive'; // Late/Inactive are often synonymous in this context
+            return true;
+        })
         .sort((a, b) => {
             let valA = '', valB = '';
             if (sortField === 'name') {
@@ -227,16 +237,17 @@ const Tenants = () => {
                 </div>
 
                 {/* Active sort badge */}
-                {sortField && (
+                {(sortField !== 'name' || sortDir !== 'asc' || statusFilter !== 'All') && (
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold whitespace-nowrap">
                         <span className="uppercase tracking-wider">
+                            {statusFilter !== 'All' ? `${statusFilter} • ` : ''}
                             {sortField === 'name' ? 'Name' : sortField === 'room' ? 'Room No.' : 'Phone'}
                         </span>
                         <span>{sortDir === 'asc' ? '↑' : '↓'}</span>
                         <button
-                            onClick={() => { setSortField('name'); setSortDir('asc'); }}
+                            onClick={() => { setSortField('name'); setSortDir('asc'); setStatusFilter('All'); }}
                             className="ml-1 text-blue-400/60 hover:text-blue-300 transition-colors"
-                            title="Reset sort"
+                            title="Reset filters"
                         >
                             <X size={12} />
                         </button>
@@ -267,17 +278,35 @@ const Tenants = () => {
                                 className="absolute right-0 top-full mt-2 w-52 bg-[#0f1117] border border-white/10 rounded-xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
                             >
                                 <div className="px-4 py-2.5 border-b border-white/5">
+                                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Registration Status</p>
+                                </div>
+                                <div className="p-2 space-y-1">
+                                    {['All', 'Active', 'Late'].map(st => (
+                                        <button
+                                            key={st}
+                                            onClick={() => setStatusFilter(st)}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                                                statusFilter === st ? 'bg-blue-600 text-white font-bold' : 'text-white/40 hover:bg-white/5'
+                                            }`}
+                                        >
+                                            {st} Tenants
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="px-4 py-2.5 border-y border-white/5">
                                     <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Sort By</p>
                                 </div>
-                                {[
-                                    { field: 'name',  label: 'Tenant Name',  icon: '🔤' },
-                                    { field: 'room',  label: 'Room Number',  icon: '🚪' },
-                                    { field: 'phone', label: 'Phone Number', icon: '📞' },
-                                ].map(({ field, label, icon }) => (
-                                    <div key={field}>
+                                <div className="p-1">
+                                    {[
+                                        { field: 'name',  label: 'Tenant Name',  icon: '🔤' },
+                                        { field: 'room',  label: 'Room Number',  icon: '🚪' },
+                                        { field: 'phone', label: 'Phone Number', icon: '📞' },
+                                    ].map(({ field, label, icon }) => (
                                         <button
+                                            key={field}
                                             onClick={() => handleSort(field)}
-                                            className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-white/5 ${
+                                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-white/5 ${
                                                 sortField === field ? 'text-blue-400 bg-blue-500/10' : 'text-white/70'
                                             }`}
                                         >
@@ -286,29 +315,19 @@ const Tenants = () => {
                                                 <span>{label}</span>
                                             </span>
                                             {sortField === field && (
-                                                <span className="text-xs font-bold">
-                                                    {sortDir === 'asc' ? '↑ A–Z' : '↓ Z–A'}
+                                                <span className="text-xs font-bold bg-blue-500/20 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-tighter">
+                                                    {sortDir === 'asc' ? '↑' : '↓'}
                                                 </span>
                                             )}
                                         </button>
-                                        <button
-                                            onClick={() => { setSortField(field); setSortDir('asc'); setShowSortMenu(false); }}
-                                            className="hidden"
-                                        />
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                                 <div className="px-4 py-2.5 border-t border-white/5 flex gap-2">
                                     <button
-                                        onClick={() => { setSortField('name'); setSortDir('asc'); setShowSortMenu(false); }}
-                                        className="flex-1 text-[11px] py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 transition-colors"
+                                        onClick={() => { setSortField('name'); setSortDir('asc'); setStatusFilter('All'); setShowSortMenu(false); }}
+                                        className="flex-1 text-[11px] py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 transition-colors font-bold uppercase tracking-widest"
                                     >
                                         Reset
-                                    </button>
-                                    <button
-                                        onClick={() => setShowSortMenu(false)}
-                                        className="flex-1 text-[11px] py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 transition-colors"
-                                    >
-                                        Apply
                                     </button>
                                 </div>
                             </motion.div>
