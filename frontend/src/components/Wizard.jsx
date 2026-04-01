@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Bed, Check, Upload, FileText, Camera, AlertCircle, Shield, Wifi, Users } from 'lucide-react';
+import { User, Bed, Check, Upload, FileText, Camera, AlertCircle, Shield, Wifi, Users, X } from 'lucide-react';
 import axios from 'axios';
 
 // --- Steps Definition ---
@@ -13,22 +13,40 @@ const steps = [
 // Removed mockRooms - now using live state in component
 
 // --- Upload Card Component ---
-const UploadCard = ({ title, icon: Icon, file, onSelect }) => {
+const UploadCard = ({ title, icon: Icon, file, onSelect, onRemove }) => {
   return (
     <div className="relative group cursor-pointer">
       <input
         type="file"
+        key={file ? file.name : 'empty'}
         className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer"
-        onChange={(e) => onSelect(e.target.files[0])}
-        accept="image/*"
+        onChange={(e) => {
+           if(e.target.files && e.target.files[0]) {
+               onSelect(e.target.files[0]);
+           }
+        }}
+        accept="image/*,.pdf,.doc,.docx"
       />
+      {file && (
+        <button 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if(onRemove) onRemove();
+          }}
+          className="absolute top-2 right-2 z-30 p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 text-white shadow-lg transition-colors border border-red-400"
+          title="Remove File"
+        >
+          <X size={14} strokeWidth={3} />
+        </button>
+      )}
       <div className={`glass-card p-6 flex flex-col items-center justify-center h-48 border-2 border-dashed transition-all ${file ? 'border-green-500/50 bg-green-500/10' : 'border-white/10 hover:border-blue-500/30'}`}>
         {file ? (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex flex-col items-center">
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex flex-col items-center w-full">
             <div className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center mb-2 shadow-lg shadow-green-500/20">
               <Check className="text-white" />
             </div>
-            <span className="text-sm font-medium text-green-400">{file.name}</span>
+            <span className="text-sm font-medium text-green-400 truncate w-full max-w-[150px] text-center">{file.name}</span>
             <span className="text-xs text-white/30 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
           </motion.div>
         ) : (
@@ -695,24 +713,28 @@ const Wizard = () => {
                 icon={FileText}
                 file={formData.files.id_front}
                 onSelect={(f) => handleFileSelect('id_front', f)}
+                onRemove={() => handleFileSelect('id_front', null)}
               />
               <UploadCard
                 title="ID Back"
                 icon={FileText}
                 file={formData.files.id_back}
                 onSelect={(f) => handleFileSelect('id_back', f)}
+                onRemove={() => handleFileSelect('id_back', null)}
               />
               <UploadCard
                 title="Agreement"
                 icon={FileText}
                 file={formData.files.agreement}
                 onSelect={(f) => handleFileSelect('agreement', f)}
+                onRemove={() => handleFileSelect('agreement', null)}
               />
               <UploadCard
                 title="Police Form"
                 icon={Shield}
                 file={formData.files.police_form}
                 onSelect={(f) => handleFileSelect('police_form', f)}
+                onRemove={() => handleFileSelect('police_form', null)}
               />
             </div>
             {!formData.files.police_form && (
