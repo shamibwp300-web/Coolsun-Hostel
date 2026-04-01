@@ -8,6 +8,9 @@ const Tenants = () => {
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [sortField, setSortField] = useState('name');
+    const [sortDir, setSortDir] = useState('asc');
+    const [showSortMenu, setShowSortMenu] = useState(false);
     const [editingTenant, setEditingTenant] = useState(null);
     const [roomTenants, setRoomTenants] = useState([]);
     const [moveOutTenant, setMoveOutTenant] = useState(null);
@@ -130,11 +133,43 @@ const Tenants = () => {
         e.target.value = null; // Reset input
     };
 
-    const filteredTenants = tenants.filter(t =>
-        t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.phone?.includes(searchTerm)
-    );
+    const handleSort = (field) => {
+        if (sortField === field) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDir('asc');
+        }
+        setShowSortMenu(false);
+    };
+
+    const SortArrow = ({ field }) => {
+        if (sortField !== field) return <span className="inline-block ml-1 text-white/20 text-[10px]">↕</span>;
+        return <span className="inline-block ml-1 text-blue-400 text-[10px]">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+    };
+
+    const filteredTenants = tenants
+        .filter(t =>
+            t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.phone?.includes(searchTerm)
+        )
+        .sort((a, b) => {
+            let valA = '', valB = '';
+            if (sortField === 'name') {
+                valA = (a.name || '').toLowerCase();
+                valB = (b.name || '').toLowerCase();
+            } else if (sortField === 'room') {
+                valA = String(a.room || '').toLowerCase();
+                valB = String(b.room || '').toLowerCase();
+            } else if (sortField === 'phone') {
+                valA = (a.phone || '');
+                valB = (b.phone || '');
+            }
+            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
 
     // Compute live refund estimate
     const liveRefund = settlementPreview
@@ -190,9 +225,96 @@ const Tenants = () => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <button className="p-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all border border-white/10">
-                    <Filter size={20} />
-                </button>
+
+                {/* Active sort badge */}
+                {sortField && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold whitespace-nowrap">
+                        <span className="uppercase tracking-wider">
+                            {sortField === 'name' ? 'Name' : sortField === 'room' ? 'Room No.' : 'Phone'}
+                        </span>
+                        <span>{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        <button
+                            onClick={() => { setSortField('name'); setSortDir('asc'); }}
+                            className="ml-1 text-blue-400/60 hover:text-blue-300 transition-colors"
+                            title="Reset sort"
+                        >
+                            <X size={12} />
+                        </button>
+                    </div>
+                )}
+
+                {/* Sort dropdown */}
+                <div className="relative">
+                    <button
+                        onClick={() => setShowSortMenu(v => !v)}
+                        className={`p-3 rounded-lg transition-all border flex items-center gap-2 ${
+                            showSortMenu
+                                ? 'bg-blue-600/20 border-blue-500/50 text-blue-400'
+                                : 'bg-white/5 hover:bg-white/10 text-white/50 hover:text-white border-white/10'
+                        }`}
+                        title="Sort options"
+                    >
+                        <Filter size={20} />
+                    </button>
+
+                    <AnimatePresence>
+                        {showSortMenu && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute right-0 top-full mt-2 w-52 bg-[#0f1117] border border-white/10 rounded-xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
+                            >
+                                <div className="px-4 py-2.5 border-b border-white/5">
+                                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Sort By</p>
+                                </div>
+                                {[
+                                    { field: 'name',  label: 'Tenant Name',  icon: '🔤' },
+                                    { field: 'room',  label: 'Room Number',  icon: '🚪' },
+                                    { field: 'phone', label: 'Phone Number', icon: '📞' },
+                                ].map(({ field, label, icon }) => (
+                                    <div key={field}>
+                                        <button
+                                            onClick={() => handleSort(field)}
+                                            className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-white/5 ${
+                                                sortField === field ? 'text-blue-400 bg-blue-500/10' : 'text-white/70'
+                                            }`}
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>{icon}</span>
+                                                <span>{label}</span>
+                                            </span>
+                                            {sortField === field && (
+                                                <span className="text-xs font-bold">
+                                                    {sortDir === 'asc' ? '↑ A–Z' : '↓ Z–A'}
+                                                </span>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => { setSortField(field); setSortDir('asc'); setShowSortMenu(false); }}
+                                            className="hidden"
+                                        />
+                                    </div>
+                                ))}
+                                <div className="px-4 py-2.5 border-t border-white/5 flex gap-2">
+                                    <button
+                                        onClick={() => { setSortField('name'); setSortDir('asc'); setShowSortMenu(false); }}
+                                        className="flex-1 text-[11px] py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 transition-colors"
+                                    >
+                                        Reset
+                                    </button>
+                                    <button
+                                        onClick={() => setShowSortMenu(false)}
+                                        className="flex-1 text-[11px] py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 transition-colors"
+                                    >
+                                        Apply
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
             {/* Registry Table */}
@@ -200,9 +322,24 @@ const Tenants = () => {
                 <table className="w-full text-left">
                     <thead className="bg-white/5 text-xs uppercase text-white/40 font-semibold tracking-wider">
                         <tr>
-                            <th className="p-6">Tenant Name</th>
-                            <th className="p-6">Room / Bed</th>
-                            <th className="p-6">Phone</th>
+                            <th
+                                className="p-6 cursor-pointer hover:text-white/80 transition-colors select-none"
+                                onClick={() => handleSort('name')}
+                            >
+                                Tenant Name <SortArrow field="name" />
+                            </th>
+                            <th
+                                className="p-6 cursor-pointer hover:text-white/80 transition-colors select-none"
+                                onClick={() => handleSort('room')}
+                            >
+                                Room / Bed <SortArrow field="room" />
+                            </th>
+                            <th
+                                className="p-6 cursor-pointer hover:text-white/80 transition-colors select-none"
+                                onClick={() => handleSort('phone')}
+                            >
+                                Phone <SortArrow field="phone" />
+                            </th>
                             <th className="p-6">Compliance</th>
                             <th className="p-6">Documents</th>
                             <th className="p-6">Status</th>
