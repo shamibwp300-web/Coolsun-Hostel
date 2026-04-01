@@ -29,10 +29,10 @@ def get_police_records():
     result = []
     
     for t in tenants:
-        # Related documents
-        police_doc = Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).first()
-        id_front = Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).first()
-        id_back = Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).first()
+        police_doc = Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).order_by(Document.id.desc()).first()
+        id_front = Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).order_by(Document.id.desc()).first()
+        id_back = Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).order_by(Document.id.desc()).first()
+        agreement = Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).order_by(Document.id.desc()).first()
         
         result.append({
             "id": t.id,
@@ -44,10 +44,16 @@ def get_police_records():
             "father_name": t.father_name,
             "permanent_address": t.permanent_address,
             "police_station": t.police_station,
-            "document_url": fix_doc_url(t.police_form_url),
-            "police_form_url": fix_doc_url(t.police_form_url),
-            "id_card_front_url": fix_doc_url(t.id_card_front_url),
-            "id_card_back_url": fix_doc_url(t.id_card_back_url),
+            "document_url": fix_doc_url(police_doc.url) if police_doc else fix_doc_url(t.police_form_url),
+            "document_id": police_doc.id if police_doc else None,
+            "police_form_url": fix_doc_url(police_doc.url) if police_doc else fix_doc_url(t.police_form_url),
+            "police_form_id": police_doc.id if police_doc else None,
+            "id_card_front_url": fix_doc_url(id_front.url) if id_front else fix_doc_url(t.id_card_front_url),
+            "id_card_front_id": id_front.id if id_front else None,
+            "id_card_back_url": fix_doc_url(id_back.url) if id_back else fix_doc_url(t.id_card_back_url),
+            "id_card_back_id": id_back.id if id_back else None,
+            "agreement_url": fix_doc_url(agreement.url) if agreement else None,
+            "agreement_id": agreement.id if agreement else None,
             "submitted_at": t.police_form_submitted.isoformat() if t.police_form_submitted else None
         })
         
@@ -92,7 +98,8 @@ def upload_police_form(tenant_id):
     valid_types = {
         'Police_Form': 'police_form_url',
         'ID_Front': 'id_card_front_url',
-        'ID_Back': 'id_card_back_url'
+        'ID_Back': 'id_card_back_url',
+        'Agreement': None
     }
     
     if doc_type not in valid_types:
@@ -126,9 +133,10 @@ def upload_police_form(tenant_id):
             )
             db.session.add(new_doc)
             
-            # Update the direct URL field on the Tenant
+            # Update the direct URL field on the Tenant if applicable
             attr_name = valid_types[doc_type]
-            setattr(tenant, attr_name, file_url)
+            if attr_name:
+                setattr(tenant, attr_name, file_url)
             
             if doc_type == 'Police_Form':
                 tenant.police_status = 'Submitted'
@@ -154,17 +162,25 @@ def delete_police_form(document_id):
     tenant = Tenant.query.get(doc.tenant_id)
     
     try:
+        doc_type = doc.type
         doc.delete()
         
-        # Check if there are any other active police forms
-        active_forms = Document.query.filter_by(tenant_id=tenant.id, type='Police_Form', deleted_at=None).count()
-        if active_forms == 0:
-            tenant.police_status = 'Pending'
-            tenant.police_form_submitted = None
-            tenant.compliance_alert = True
+        # Clear the model field if necessary
+        if doc_type == 'ID_Front':
+            tenant.id_card_front_url = None
+        elif doc_type == 'ID_Back':
+            tenant.id_card_back_url = None
+        elif doc_type == 'Police_Form':
+            # Check if there are any other active police forms
+            active_forms = Document.query.filter_by(tenant_id=tenant.id, type='Police_Form', deleted_at=None).count()
+            if active_forms == 0:
+                tenant.police_status = 'Pending'
+                tenant.police_form_submitted = None
+                tenant.compliance_alert = True
+                tenant.police_form_url = None
             
         db.session.commit()
-        return jsonify({"message": "Police form removed successfully"}), 200
+        return jsonify({"message": f"{doc_type} removed successfully"}), 200
         
     except Exception as e:
         db.session.rollback()

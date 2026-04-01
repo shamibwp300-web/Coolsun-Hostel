@@ -312,12 +312,12 @@ const PoliceVerification = () => {
                                                 }
                                                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                     <button 
-                                                        onClick={() => setViewer({ isOpen: true, url: selectedTenant.document_url, title: `${selectedTenant.name} - Police Form` })}
+                                                        onClick={(e) => { e.preventDefault(); setViewer({ isOpen: true, url: selectedTenant.document_url, title: `${selectedTenant.name} - Police Form` })}}
                                                         className="p-2 bg-blue-500 rounded-full text-white hover:scale-110 transition-transform"
                                                     >
                                                         <Eye size={16} />
                                                     </button>
-                                                    <button onClick={() => handleDeleteDoc(selectedTenant.document_id)} className="p-2 bg-red-500 rounded-full text-white hover:scale-110 transition-transform">
+                                                    <button onClick={(e) => { e.preventDefault(); handleDeleteDoc(selectedTenant.police_form_id || selectedTenant.document_id) }} className="p-2 bg-red-500 rounded-full text-white hover:scale-110 transition-transform cursor-pointer relative z-50 pointer-events-auto">
                                                         <Trash2 size={16} />
                                                     </button>
                                                 </div>
@@ -347,6 +347,44 @@ const PoliceVerification = () => {
                                                 {uploading ? 'Uploading...' : (selectedTenant.document_url ? 'Replace Form' : 'Upload Form Scan')}
                                             </label>
                                         </div>
+                                        
+                                        {/* Agreement Form Section */}
+                                        <div className="mt-6 pt-6 border-t border-white/10 space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-[10px] text-white/40 uppercase tracking-widest block">Hostel Agreement Form</label>
+                                                <input type="file" id="agreement-doc-upload" className="hidden" accept=".pdf, .png, .jpg, .jpeg" onChange={(e) => handleUpload(e, 'Agreement')} disabled={uploading} />
+                                                <label htmlFor="agreement-doc-upload" className="text-[10px] text-blue-400 hover:text-blue-300 font-bold uppercase cursor-pointer flex items-center gap-1 transition-colors">
+                                                    {uploading ? <Clock size={10} className="animate-spin" /> : <Upload size={10} />}
+                                                    {selectedTenant.agreement_url ? 'Replace' : 'Upload'}
+                                                </label>
+                                            </div>
+                                            {selectedTenant.agreement_url ? (
+                                                <div className="aspect-[3/4] rounded-lg border border-white/10 bg-white/5 flex items-center justify-center p-2 relative group overflow-hidden">
+                                                    {selectedTenant.agreement_url.endsWith('.pdf') ?
+                                                        <FileText size={48} className="text-white/20" /> :
+                                                        <img src={selectedTenant.agreement_url} alt="Agreement" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                                    }
+                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                        <button 
+                                                            onClick={(e) => { e.preventDefault(); setViewer({ isOpen: true, url: selectedTenant.agreement_url, title: `${selectedTenant.name} - Agreement Form` })}}
+                                                            className="p-2 bg-blue-500 rounded-full text-white hover:scale-110 transition-transform"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        {selectedTenant.agreement_id && (
+                                                            <button onClick={(e) => { e.preventDefault(); handleDeleteDoc(selectedTenant.agreement_id) }} className="p-2 bg-red-500 rounded-full text-white hover:scale-110 transition-transform cursor-pointer relative z-50 pointer-events-auto">
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="aspect-[3/4] rounded-lg border border-dashed border-white/20 flex flex-col items-center justify-center p-4 text-center">
+                                                    <FileText size={32} className="text-white/10 mb-2" />
+                                                    <p className="text-xs text-white/40">No agreement uploaded yet.</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                     {/* ID Section */}
                                     <div className="space-y-6">
@@ -363,13 +401,18 @@ const PoliceVerification = () => {
                                             {selectedTenant.id_card_front_url ? (
                                                 <div className="aspect-video rounded-lg border border-white/10 bg-white/5 overflow-hidden group relative">
                                                     <img src={selectedTenant.id_card_front_url} alt="ID Front" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                         <button 
-                                                            onClick={() => setViewer({ isOpen: true, url: selectedTenant.id_card_front_url, title: `${selectedTenant.name} - ID Front` })}
+                                                            onClick={(e) => { e.preventDefault(); setViewer({ isOpen: true, url: selectedTenant.id_card_front_url, title: `${selectedTenant.name} - ID Front` })}}
                                                             className="p-2 bg-blue-500 rounded-full text-white hover:scale-110 transition-transform"
                                                         >
                                                             <Eye size={16} />
                                                         </button>
+                                                        {selectedTenant.id_card_front_id && (
+                                                            <button onClick={(e) => { e.preventDefault(); handleDeleteDoc(selectedTenant.id_card_front_id) }} className="p-2 bg-red-500 rounded-full text-white hover:scale-110 transition-transform cursor-pointer relative z-50 pointer-events-auto">
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ) : (
@@ -393,13 +436,18 @@ const PoliceVerification = () => {
                                             {selectedTenant.id_card_back_url ? (
                                                 <div className="aspect-video rounded-lg border border-white/10 bg-white/5 overflow-hidden group relative">
                                                     <img src={selectedTenant.id_card_back_url} alt="ID Back" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                         <button 
-                                                            onClick={() => setViewer({ isOpen: true, url: selectedTenant.id_card_back_url, title: `${selectedTenant.name} - ID Back` })}
+                                                            onClick={(e) => { e.preventDefault(); setViewer({ isOpen: true, url: selectedTenant.id_card_back_url, title: `${selectedTenant.name} - ID Back` })}}
                                                             className="p-2 bg-blue-500 rounded-full text-white hover:scale-110 transition-transform"
                                                         >
                                                             <Eye size={16} />
                                                         </button>
+                                                        {selectedTenant.id_card_back_id && (
+                                                            <button onClick={(e) => { e.preventDefault(); handleDeleteDoc(selectedTenant.id_card_back_id) }} className="p-2 bg-red-500 rounded-full text-white hover:scale-110 transition-transform cursor-pointer relative z-50 pointer-events-auto">
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ) : (
