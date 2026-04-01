@@ -106,6 +106,7 @@ def get_tenants():
             "id_card_back_url": t.id_card_back_url,
             "police_form_url": t.police_form_url,
             "parent_tenant_id": t.parent_tenant_id,
+            "tenancy_type": t.tenancy_type or 'Shared',
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash')
         })
     return jsonify(result), 200
@@ -130,6 +131,9 @@ def update_tenant(id):
     
     if 'internet_opt_in' in data:
         tenant.internet_opt_in = bool(data.get('internet_opt_in'))
+        
+    if 'tenancy_type' in data:
+        tenant.tenancy_type = data.get('tenancy_type')
         
     if 'parent_tenant_id' in data:
         pt_id = data.get('parent_tenant_id')

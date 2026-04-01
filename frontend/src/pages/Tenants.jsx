@@ -435,6 +435,18 @@ const Tenants = () => {
                                 {/* Tenancy & Billing Section */}
                                 <div className="space-y-4 pt-4 mt-4">
                                     <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Tenancy & Billing Details</h4>
+                                    
+                                    <div>
+                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Applied Billing System (Initial)</label>
+                                        <select value={editingTenant.tenancy_type || 'Shared'}
+                                            onChange={(e) => setEditingTenant({ ...editingTenant, tenancy_type: e.target.value })}
+                                            className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer select-none">
+                                            <option value="Shared">Pro-Rata Rent (Shared Mode)</option>
+                                            <option value="Shared Full">Full Month Rent (Shared Mode)</option>
+                                            <option value="Private">Full Room Rent (Private Mode)</option>
+                                        </select>
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Monthly Rent (Rs.)</label>
