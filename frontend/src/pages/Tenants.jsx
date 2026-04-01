@@ -377,24 +377,77 @@ const Tenants = () => {
                             onClick={() => setEditingTenant(null)}
                             className="absolute inset-0 bg-black/80 backdrop-blur-md" />
                         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                            className="glass-card w-full max-w-md p-8 border-blue-500/30 shadow-2xl relative z-[1000] pointer-events-auto">
+                            className="glass-card w-full max-w-2xl p-8 border-blue-500/30 shadow-2xl relative z-[1000] pointer-events-auto max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between items-center mb-8">
                                 <h3 className="text-xl font-bold text-white flex items-center">Edit Tenant: {editingTenant.name}</h3>
                                 <button onClick={() => setEditingTenant(null)} className="text-white/30 hover:text-white transition-colors"><X size={20} /></button>
                             </div>
                             <form onSubmit={handleUpdate} className="space-y-6">
-                                <div>
-                                    <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Full Name</label>
-                                    <input type="text" value={editingTenant.name}
-                                        onChange={e => setEditingTenant({ ...editingTenant, name: e.target.value })}
-                                        className="glass-input w-full h-12 px-4 rounded-xl" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                {/* Personal Information Section */}
+                                <div className="space-y-4">
+                                    <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Personal Information</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Full Name</label>
+                                            <input type="text" value={editingTenant.name || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, name: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Father's Name</label>
+                                            <input type="text" value={editingTenant.father_name || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, father_name: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">CNIC</label>
+                                            <input type="text" value={editingTenant.cnic || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, cnic: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Phone Number</label>
+                                            <input type="text" value={editingTenant.phone || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, phone: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Emergency Contact</label>
+                                            <input type="text" value={editingTenant.emergency_contact || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, emergency_contact: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Police Station</label>
+                                            <input type="text" value={editingTenant.police_station || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, police_station: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                    </div>
                                     <div>
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Phone</label>
-                                        <input type="text" value={editingTenant.phone}
-                                            onChange={e => setEditingTenant({ ...editingTenant, phone: e.target.value })}
+                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Permanent Address</label>
+                                        <input type="text" value={editingTenant.permanent_address || ''}
+                                            onChange={e => setEditingTenant({ ...editingTenant, permanent_address: e.target.value })}
                                             className="glass-input w-full h-12 px-4 rounded-xl" />
+                                    </div>
+                                </div>
+
+                                {/* Tenancy & Billing Section */}
+                                <div className="space-y-4 pt-4 mt-4">
+                                    <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Tenancy & Billing Details</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Monthly Rent (Rs.)</label>
+                                            <input type="number" value={editingTenant.rent_amount ?? ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, rent_amount: e.target.value ? parseFloat(e.target.value) : 0 })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Security Deposit (Rs.)</label>
+                                            <input type="number" value={editingTenant.security_deposit ?? ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, security_deposit: e.target.value ? parseFloat(e.target.value) : 0 })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Bed Label</label>
@@ -403,36 +456,37 @@ const Tenants = () => {
                                             onChange={e => setEditingTenant({ ...editingTenant, bed_label: e.target.value, bed: e.target.value })}
                                             className="glass-input w-full h-12 px-4 rounded-xl" />
                                     </div>
-                                </div>
-                                <div className="space-y-4 pt-2">
-                                    <label className="text-[10px] items-center text-blue-400 uppercase tracking-widest flex font-bold">
-                                        <Users size={12} className="mr-1" /> Tenancy Hierarchy
-                                    </label>
-                                    <div className="bg-blue-500/5 border border-blue-500/20 p-4 rounded-xl">
-                                        <p className="text-xs text-blue-200/70 mb-3">Does this person pay rent via a primary room tenant?</p>
-                                        <select value={editingTenant.parent_tenant_id || ''}
-                                            onChange={(e) => setEditingTenant({ ...editingTenant, parent_tenant_id: e.target.value })}
-                                            className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer">
-                                            <option value="">Independent Tenant (Primary)</option>
-                                            {roomTenants.map(t => (
-                                                <option key={t.id} value={t.id}>Sub-tenant to: {t.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="space-y-4">
-                                    <label className="text-[10px] text-blue-400 uppercase tracking-widest block font-bold mt-2">Additional Services</label>
-                                    <div className={`glass-card p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${editingTenant.internet_opt_in ? 'border-purple-500/50 bg-purple-500/10' : 'border-white/10 bg-black/20'}`}
-                                        onClick={() => setEditingTenant({ ...editingTenant, internet_opt_in: !editingTenant.internet_opt_in })}>
-                                        <div className="flex items-center">
-                                            <Wifi size={18} className={editingTenant.internet_opt_in ? "text-purple-400 mr-3" : "text-white/30 mr-3"} />
-                                            <div>
-                                                <div className="text-white font-bold text-sm">Hostel Internet Access</div>
-                                                <div className="text-xs text-white/50 mt-0.5">Opt-in to share the monthly Wi-Fi bill</div>
-                                            </div>
+                                    
+                                    <div className="space-y-2 pt-2">
+                                        <label className="text-[10px] items-center text-white/40 uppercase tracking-widest flex font-bold">
+                                            <Users size={12} className="mr-1" /> Tenancy Hierarchy
+                                        </label>
+                                        <div className="bg-white/5 border border-white/10 p-4 rounded-xl">
+                                            <p className="text-xs text-white/60 mb-3">Does this person pay rent via a primary room tenant?</p>
+                                            <select value={editingTenant.parent_tenant_id || ''}
+                                                onChange={(e) => setEditingTenant({ ...editingTenant, parent_tenant_id: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer">
+                                                <option value="">Independent Tenant (Primary)</option>
+                                                {roomTenants.map(t => (
+                                                    <option key={t.id} value={t.id}>Sub-tenant to: {t.name}</option>
+                                                ))}
+                                            </select>
                                         </div>
-                                        <div className={`w-10 h-6 rounded-full transition-colors flex items-center p-1 ${editingTenant.internet_opt_in ? 'bg-purple-500' : 'bg-white/10'}`}>
-                                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${editingTenant.internet_opt_in ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-white/40 uppercase tracking-widest block font-bold mt-2">Additional Services</label>
+                                        <div className={`glass-card p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${editingTenant.internet_opt_in ? 'border-purple-500/50 bg-purple-500/10' : 'border-white/10 bg-black/20'}`}
+                                            onClick={() => setEditingTenant({ ...editingTenant, internet_opt_in: !editingTenant.internet_opt_in })}>
+                                            <div className="flex items-center">
+                                                <Wifi size={18} className={editingTenant.internet_opt_in ? "text-purple-400 mr-3" : "text-white/30 mr-3"} />
+                                                <div>
+                                                    <div className="text-white font-bold text-sm">Hostel Internet Access</div>
+                                                    <div className="text-xs text-white/50 mt-0.5">Opt-in to share the monthly Wi-Fi bill</div>
+                                                </div>
+                                            </div>
+                                            <div className={`w-10 h-6 rounded-full transition-colors flex items-center p-1 ${editingTenant.internet_opt_in ? 'bg-purple-500' : 'bg-white/10'}`}>
+                                                <div className={`w-4 h-4 bg-white rounded-full transition-transform ${editingTenant.internet_opt_in ? 'translate-x-4' : 'translate-x-0'}`} />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
