@@ -84,6 +84,13 @@ def get_tenants():
             "opening_balance": opening_balance_pending,
             "total_paid": total_paid,
             "phone": t.phone,
+            "cnic": t.cnic,
+            "father_name": t.father_name,
+            "permanent_address": t.permanent_address,
+            "emergency_contact": t.emergency_contact,
+            "police_station": t.police_station,
+            "rent_amount": float(t.billing_profile.rent_amount) if t.billing_profile and t.billing_profile.rent_amount else 0,
+            "security_deposit": float(t.billing_profile.security_deposit) if t.billing_profile and t.billing_profile.security_deposit else 0,
             "internet_opt_in": t.internet_opt_in,
             "id_card_front_url": t.id_card_front_url,
             "id_card_back_url": t.id_card_back_url,
@@ -100,6 +107,12 @@ def update_tenant(id):
     
     tenant.name = data.get('name', tenant.name)
     tenant.phone = data.get('phone', tenant.phone)
+    tenant.cnic = data.get('cnic', tenant.cnic)
+    tenant.father_name = data.get('father_name', tenant.father_name)
+    tenant.permanent_address = data.get('permanent_address', tenant.permanent_address)
+    tenant.emergency_contact = data.get('emergency_contact', tenant.emergency_contact)
+    tenant.police_station = data.get('police_station', tenant.police_station)
+    
     # Accept either 'bed_label' (new) or 'bed' (legacy frontend key)
     bed_val = data.get('bed_label') or data.get('bed')
     if bed_val is not None:
@@ -111,6 +124,12 @@ def update_tenant(id):
     if 'parent_tenant_id' in data:
         pt_id = data.get('parent_tenant_id')
         tenant.parent_tenant_id = None if pt_id == '' or pt_id is None else int(pt_id)
+        
+    if tenant.billing_profile:
+        if 'rent_amount' in data:
+            tenant.billing_profile.rent_amount = data.get('rent_amount')
+        if 'security_deposit' in data:
+            tenant.billing_profile.security_deposit = data.get('security_deposit')
         
     db.session.commit()
     return jsonify({"message": "Successfully updated tenant"}), 200
