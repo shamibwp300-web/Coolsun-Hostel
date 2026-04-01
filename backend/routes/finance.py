@@ -261,6 +261,56 @@ def generate_bulk_rent():
     db.session.commit()
     return jsonify({"message": f"Generated rent for {generated} profiles (including bulk floors)"}), 200
 
+@finance_bp.route('/finance/manual-charge', methods=['POST'])
+def add_manual_charge():
+    """Allows admin to manually inject a PENDING charge/bill into a tenant's ledger (with backdating support)"""
+    data = request.json
+    tenant_id = data.get('tenant_id')
+    amount = float(data.get('amount', 0))
+    charge_type = data.get('type', 'RENT') # 'RENT', 'DEPOSIT', 'UTILITY', 'FINE'
+    description = data.get('description', '')
+    
+    if not tenant_id or amount <= 0:
+        return jsonify({"error": "Invalid data. Amount must be greater than 0."}), 400
+        
+    tenant = Tenant.query.get(tenant_id)
+    if not tenant:
+        return jsonify({"error": "Tenant not found."}), 404
+        
+    # Date parsing for backdating
+    charge_date = datetime.utcnow()
+    if 'date' in data and data['date']:
+        try:
+            dstr = data.get('date').split('T')[0]
+            # Convert YYYY-MM-DD to a datetime strictly for the Ledger timestamp
+            parsed_date = datetime.strptime(dstr, '%Y-%m-%d')
+            # Retain current time hours/mins to avoid tz shift issues if needed, or just set to midnight
+            charge_date = parsed_date
+        except ValueError:
+            pass
+
+    # For Private Rent mode
+    if charge_type == 'RENT' and tenant.tenancy_type == 'Private':
+        charge_type = 'PRIVATE_RENT'
+
+    # Create the Ledger entry as PENDING (meaning the tenant now owes this money)
+    entry = Ledger(
+        tenant_id=tenant_id,
+        amount=amount,
+        type=charge_type,
+        status='PENDING',
+        description=description or f"Manual Charge: {charge_type}",
+        timestamp=charge_date
+    )
+    
+    db.session.add(entry)
+    db.session.commit()
+    
+    return jsonify({
+        "message": f"Successfully charged Rs. {amount} to {tenant.name} for {charge_type}.",
+        "id": entry.id
+    }), 201
+
 @finance_bp.route('/finance/opening-balance', methods=['POST'])
 def add_opening_balance():
     data = request.json

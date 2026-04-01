@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard } from 'lucide-react';
+import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt } from 'lucide-react';
 import axios from 'axios';
 import DocumentViewerModal from '../components/DocumentViewerModal';
 
@@ -23,6 +23,16 @@ const Tenants = () => {
     const [moveOutLoading, setMoveOutLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
     
+    // Add Manual Charge State
+    const [chargeModalTenant, setChargeModalTenant] = useState(null);
+    const [chargeForm, setChargeForm] = useState({
+        type: 'RENT',
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        description: ''
+    });
+    const [chargeLoading, setChargeLoading] = useState(false);
+
     // Document Viewer State
     const [viewer, setViewer] = useState({ isOpen: false, url: '', title: '' });
 
@@ -81,6 +91,30 @@ const Tenants = () => {
             alert(e.response?.data?.error || 'Move-out failed');
         } finally {
             setMoveOutLoading(false);
+        }
+    };
+
+    const handleAddCharge = async (e) => {
+        e.preventDefault();
+        if (!chargeForm.amount || parseFloat(chargeForm.amount) <= 0) {
+            alert("A valid amount is required");
+            return;
+        }
+
+        setChargeLoading(true);
+        try {
+            const payload = {
+                tenant_id: chargeModalTenant.id,
+                ...chargeForm
+            };
+            await axios.post('/api/finance/manual-charge', payload);
+            alert(`✅ Charge added successfully!`);
+            setChargeModalTenant(null);
+            fetchTenants(); // Re-fetch immediately to update live balance
+        } catch (err) {
+            alert(err.response?.data?.error || "Failed to add charge");
+        } finally {
+            setChargeLoading(false);
         }
     };
 
@@ -330,6 +364,21 @@ const Tenants = () => {
                                         <a href={`https://wa.me/${tenant.phone?.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" title="WhatsApp" className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors">
                                             <MessageCircle size={18} />
                                         </a>
+                                        <button
+                                            title="Add Manual Charge/Bill"
+                                            onClick={() => {
+                                                setChargeModalTenant(tenant);
+                                                setChargeForm({
+                                                    type: 'RENT',
+                                                    amount: '',
+                                                    date: new Date().toISOString().split('T')[0],
+                                                    description: ''
+                                                });
+                                            }}
+                                            className="p-2 rounded-lg hover:bg-purple-500/20 text-purple-400 transition-colors"
+                                        >
+                                            <Receipt size={18} />
+                                        </button>
                                         <button
                                             title="Edit"
                                             onClick={() => {
@@ -644,6 +693,91 @@ const Tenants = () => {
                                     Delete Now
                                 </button>
                             </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ── ADD MANUAL CHARGE MODAL ── */}
+            <AnimatePresence>
+                {chargeModalTenant && (
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setChargeModalTenant(null)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0, y: 50 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 50 }}
+                            className="glass-card w-full max-w-lg p-8 border-purple-500/30 shadow-2xl relative z-[1010]">
+                            
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <Receipt className="text-purple-400" size={24} /> Add Manual Charge
+                                    </h3>
+                                    <p className="text-white/50 text-sm mt-1">Tenant: <span className="font-bold text-white">{chargeModalTenant.name}</span></p>
+                                </div>
+                                <button onClick={() => setChargeModalTenant(null)} className="text-white/30 hover:text-white transition-colors">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleAddCharge} className="space-y-4 pt-2">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Charge Type *</label>
+                                        <select 
+                                            value={chargeForm.type}
+                                            onChange={(e) => setChargeForm({...chargeForm, type: e.target.value})}
+                                            className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer"
+                                        >
+                                            <option value="RENT">Rent Arrears</option>
+                                            <option value="DEPOSIT">Security Deposit</option>
+                                            <option value="UTILITY">Utility Bill</option>
+                                            <option value="FINE">Fine / Warning Penalty</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Amount (Rs.) *</label>
+                                        <input type="number" step="any" required min="1"
+                                            value={chargeForm.amount}
+                                            onChange={(e) => setChargeForm({...chargeForm, amount: e.target.value})}
+                                            placeholder="e.g. 50000"
+                                            className="glass-input w-full h-12 px-4 rounded-xl placeholder:text-white/20" 
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Bill Generated Date (For Backdating) *</label>
+                                    <input type="date" required
+                                        value={chargeForm.date}
+                                        title="Select a past date to backdate this bill to when it actually occurred"
+                                        onChange={(e) => setChargeForm({...chargeForm, date: e.target.value})}
+                                        className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer" 
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Description / Note</label>
+                                    <input type="text"
+                                        value={chargeForm.description}
+                                        onChange={(e) => setChargeForm({...chargeForm, description: e.target.value})}
+                                        placeholder="Optional explanation for this charge..."
+                                        className="glass-input w-full h-12 px-4 rounded-xl placeholder:text-white/20" 
+                                    />
+                                </div>
+
+                                <div className="pt-4 flex gap-3">
+                                    <button type="button" onClick={() => setChargeModalTenant(null)}
+                                        className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
+                                        Cancel
+                                    </button>
+                                    <button type="submit" disabled={chargeLoading}
+                                        className="flex-1 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center justify-center shadow-lg shadow-purple-500/20 transition-all disabled:opacity-50">
+                                        {chargeLoading ? 'Adding...' : 'Apply Charge'}
+                                    </button>
+                                </div>
+                            </form>
+
                         </motion.div>
                     </div>
                 )}
