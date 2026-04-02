@@ -291,7 +291,16 @@ const Tenants = () => {
                                                 <FileText size={14} />
                                             </button>
                                         )}
-                                        {!tenant.id_card_front_url && !tenant.id_card_back_url && !tenant.police_form_url && (
+                                        {tenant.agreement_url && (
+                                            <button 
+                                                onClick={() => setViewer({ isOpen: true, url: tenant.agreement_url, title: `${tenant.name} - Agreement Form` })}
+                                                className="p-1.5 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
+                                                title="View Agreement Form"
+                                            >
+                                                <FileText size={14} />
+                                            </button>
+                                        )}
+                                        {!tenant.id_card_front_url && !tenant.id_card_back_url && !tenant.police_form_url && !tenant.agreement_url && (
                                             <span className="text-[10px] text-white/20 uppercase font-bold tracking-tighter">No Files</span>
                                         )}
                                     </div>

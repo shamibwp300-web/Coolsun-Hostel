@@ -197,9 +197,19 @@ def create_tenant():
                     timestamp = int(datetime.now().timestamp())
                     filename = f"tenant_{tenant.id}_agreement_{timestamp}{os.path.splitext(file.filename)[1]}"
                     file_path = os.path.join(static_doc_dir, filename)
+                    
+                    # URL for frontend access
+                    db_url = f"/api/docs/{filename}"
+                    
+                    # Save File
                     file.save(file_path)
                     saved_files.append(file_path)
-                    doc = Document(tenant_id=tenant.id, type='Agreement', url=f"/api/docs/{filename}")
+                    
+                    # 1. Update direct field on Tenant
+                    tenant.agreement_url = db_url
+                    
+                    # 2. Maintain Document table record
+                    doc = Document(tenant_id=tenant.id, type='Agreement', url=db_url)
                     db.session.add(doc)
 
         # Commit only if everything succeeded

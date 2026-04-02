@@ -69,6 +69,7 @@ class Tenant(db.Model, SoftDeleteMixin):
     id_card_front_url = db.Column(db.String(255))
     id_card_back_url = db.Column(db.String(255))
     police_form_url = db.Column(db.String(255))
+    agreement_url = db.Column(db.String(255))
     police_form_submitted = db.Column(db.DateTime)
     internet_opt_in = db.Column(db.Boolean, default=False)
     tenancy_type = db.Column(db.String(50))
