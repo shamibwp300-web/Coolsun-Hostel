@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from backend.models import db, Tenant, Room, Ledger
+from backend.models import db, Tenant, Room, Ledger, Document
 
 tenants_bp = Blueprint('tenants', __name__)
 
@@ -96,10 +96,10 @@ def get_tenants():
             "rent_amount": float(t.billing_profile.rent_amount) if t.billing_profile and t.billing_profile.rent_amount else 0,
             "security_deposit": float(t.billing_profile.security_deposit) if t.billing_profile and t.billing_profile.security_deposit else 0,
             "internet_opt_in": t.internet_opt_in,
-            "id_card_front_url": t.id_card_front_url,
-            "id_card_back_url": t.id_card_back_url,
-            "police_form_url": t.police_form_url,
-            "agreement_url": getattr(t, 'agreement_url', None),
+            "id_card_front_url": t.id_card_front_url or getattr(Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
+            "id_card_back_url": t.id_card_back_url or getattr(Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
+            "police_form_url": t.police_form_url or getattr(Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
+            "agreement_url": t.agreement_url or getattr(Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
             "parent_tenant_id": t.parent_tenant_id,
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
             "is_archived": t.deleted_at is not None

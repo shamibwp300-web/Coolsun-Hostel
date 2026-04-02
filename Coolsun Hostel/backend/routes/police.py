@@ -83,7 +83,8 @@ def upload_police_form(tenant_id):
     valid_types = {
         'Police_Form': 'police_form_url',
         'ID_Front': 'id_card_front_url',
-        'ID_Back': 'id_card_back_url'
+        'ID_Back': 'id_card_back_url',
+        'Agreement': 'agreement_url'
     }
     
     if doc_type not in valid_types:
