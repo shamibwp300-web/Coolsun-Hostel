@@ -5,7 +5,11 @@ tenants_bp = Blueprint('tenants', __name__)
 
 @tenants_bp.route('/tenants', methods=['GET'])
 def get_tenants():
-    tenants = Tenant.query_active().all()
+    show_archived = request.args.get('show_archived') == 'true'
+    if show_archived:
+        tenants = Tenant.query.all()
+    else:
+        tenants = Tenant.query_active().all()
     result = []
     for t in tenants:
         room = Room.query.get(t.room_id)
@@ -95,8 +99,10 @@ def get_tenants():
             "id_card_front_url": t.id_card_front_url,
             "id_card_back_url": t.id_card_back_url,
             "police_form_url": t.police_form_url,
+            # "agreement_url": t.agreement_url,
             "parent_tenant_id": t.parent_tenant_id,
-            "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash')
+            "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
+            "is_archived": t.deleted_at is not None
         })
     return jsonify(result), 200
 
@@ -139,7 +145,14 @@ def delete_tenant(id):
     tenant = Tenant.query_active().filter_by(id=id).first_or_404()
     tenant.delete() # Uses SoftDeleteMixin
     db.session.commit()
-    return jsonify({"message": "Successfully removed tenant"}), 200
+    return jsonify({"message": "Successfully archived tenant"}), 200
+
+@tenants_bp.route('/tenants/<int:id>/restore', methods=['PUT'])
+def restore_tenant(id):
+    tenant = Tenant.query.filter_by(id=id).first_or_404()
+    tenant.deleted_at = None
+    db.session.commit()
+    return jsonify({"message": "Successfully restored tenant"}), 200
 
 import csv
 from io import StringIO

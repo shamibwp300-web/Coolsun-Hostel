@@ -157,6 +157,8 @@ def create_tenant():
                     
                     if field in attr_mapping:
                         setattr(tenant, attr_mapping[field], db_url)
+                    if field == 'agreement':
+                        tenant.agreement_url = db_url
                     if field == 'police_form':
                         tenant.police_form_submitted = datetime.utcnow()
 

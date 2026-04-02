@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt } from 'lucide-react';
+import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt, RotateCcw, Archive } from 'lucide-react';
 import axios from 'axios';
 import DocumentViewerModal from '../components/DocumentViewerModal';
 
@@ -22,6 +22,8 @@ const Tenants = () => {
     });
     const [moveOutLoading, setMoveOutLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+    const [showArchived, setShowArchived] = useState(false);
+    const [archivedCount, setArchivedCount] = useState(0);
     
     // Add Manual Charge State
     const [chargeModalTenant, setChargeModalTenant] = useState(null);
@@ -38,8 +40,10 @@ const Tenants = () => {
 
     const fetchTenants = async () => {
         try {
-            const res = await axios.get('/api/tenants');
-            setTenants(res.data);
+            const res = await axios.get(`/api/tenants?show_archived=true`);
+            const allTenants = res.data;
+            setTenants(allTenants);
+            setArchivedCount(allTenants.filter(t => t.is_archived).length);
             setLoading(false);
         } catch (err) {
             console.error("Failed to fetch tenants", err);
@@ -137,11 +141,22 @@ const Tenants = () => {
             const res = await axios.delete(`/api/tenants/${id}`);
             console.log("Delete successful:", res.data);
             setDeleteConfirm(null);
-            alert(`✅ ${name} has been removed from the registry.`);
+            alert(`✅ ${name} has been archived successfully.`);
             fetchTenants();
         } catch (err) {
-            console.error("Delete failed:", err);
-            alert(err.response?.data?.error || `Failed to remove ${name}`);
+            console.error("Archive failed:", err);
+            alert(err.response?.data?.error || `Failed to archive ${name}`);
+        }
+    };
+
+    const handleRestore = async (tenant) => {
+        if (!window.confirm(`Restore ${tenant.name} to active registry?`)) return;
+        try {
+            await axios.put(`/api/tenants/${tenant.id}/restore`);
+            alert(`✅ ${tenant.name} has been restored!`);
+            fetchTenants();
+        } catch (err) {
+            alert(err.response?.data?.error || "Restore failed");
         }
     };
 
@@ -164,11 +179,15 @@ const Tenants = () => {
         e.target.value = null; // Reset input
     };
 
-    const filteredTenants = tenants.filter(t =>
-        t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.phone?.includes(searchTerm)
-    );
+    const filteredTenants = tenants.filter(t => {
+        const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.phone?.includes(searchTerm);
+        
+        const matchesView = showArchived ? t.is_archived : !t.is_archived;
+        
+        return matchesSearch && matchesView;
+    });
 
     // Compute live refund estimate
     const liveRefund = settlementPreview
@@ -183,7 +202,9 @@ const Tenants = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-white">Tenant Registry</h1>
-                    <p className="text-white/40 text-sm">Manage {tenants.length} Active Tenants</p>
+                    <p className="text-white/40 text-sm">
+                        {showArchived ? `${archivedCount} Archived Records` : `Manage ${tenants.length - archivedCount} Active Tenants`}
+                    </p>
                 </div>
                 <div className="flex space-x-3">
                     <input
@@ -224,6 +245,22 @@ const Tenants = () => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                
+                <div className="flex bg-black/40 p-1.5 rounded-xl border border-white/10">
+                    <button 
+                        onClick={() => setShowArchived(false)}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${!showArchived ? 'bg-blue-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+                    >
+                        Active
+                    </button>
+                    <button 
+                        onClick={() => setShowArchived(true)}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${showArchived ? 'bg-orange-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+                    >
+                        Archived {archivedCount > 0 && <span className="bg-white/20 px-1.5 py-0.5 rounded-md text-[10px]">{archivedCount}</span>}
+                    </button>
+                </div>
+
                 <button className="p-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all border border-white/10">
                     <Filter size={20} />
                 </button>
@@ -247,8 +284,11 @@ const Tenants = () => {
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {filteredTenants.map((tenant) => (
-                            <tr key={tenant.id} className="hover:bg-white/5 transition-colors group">
-                                <td className="p-6 font-medium text-white">{tenant.name}</td>
+                            <tr key={tenant.id} className={`hover:bg-white/5 transition-colors group ${tenant.is_archived ? 'opacity-60 bg-black/10' : ''}`}>
+                                <td className="p-6 font-medium text-white">
+                                    {tenant.name}
+                                    {tenant.is_archived && <span className="ml-2 text-[8px] bg-white/10 px-1 py-0.5 rounded text-white/40 uppercase tracking-tighter">Archived</span>}
+                                </td>
                                 <td className="p-6">
                                     <div className="text-white/70">{tenant.room}</div>
                                     <div className="text-[10px] text-white/30 uppercase tracking-widest">{tenant.bed}</div>
@@ -407,12 +447,21 @@ const Tenants = () => {
                                             <LogOut size={18} />
                                         </button>
                                         <button
-                                            title="Delete"
+                                            title="Archive"
                                             onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
-                                            className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                                            className="p-2 rounded-lg hover:bg-red-500/20 text-red-500/60 hover:text-red-500 transition-colors"
                                         >
-                                            <Trash2 size={18} />
+                                            <Archive size={18} />
                                         </button>
+                                        {tenant.is_archived && (
+                                            <button
+                                                title="Restore"
+                                                onClick={() => handleRestore(tenant)}
+                                                className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors"
+                                            >
+                                                <RotateCcw size={18} />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -686,11 +735,11 @@ const Tenants = () => {
                         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
                             className="glass-card w-full max-w-sm p-8 border-red-500/30 shadow-2xl relative z-[1000] text-center">
                             <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <Trash2 size={32} className="text-red-500" />
+                                <Archive size={32} className="text-red-500" />
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">Remove Tenant?</h3>
+                            <h3 className="text-xl font-bold text-white mb-2">Archive Tenant?</h3>
                             <p className="text-white/60 mb-8">
-                                Are you sure you want to remove <span className="text-white font-bold">{deleteConfirm.name}</span> from the registry? This action is reversible by an admin.
+                                Are you sure you want to move <span className="text-white font-bold">{deleteConfirm.name}</span> to the archive? Their occupancy will be freed, but all financial and document history is preserved and restorable by an admin.
                             </p>
                             <div className="flex gap-3">
                                 <button onClick={() => setDeleteConfirm(null)}
@@ -699,7 +748,7 @@ const Tenants = () => {
                                 </button>
                                 <button onClick={handleDelete}
                                     className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-lg shadow-red-500/30">
-                                    Delete Now
+                                    Archive Now
                                 </button>
                             </div>
                         </motion.div>

@@ -61,6 +61,20 @@ def create_app():
     # 2. Auto-seed default users (Independently wrapped)
     try:
         with app.app_context():
+            # 🛡️ Structural Guard: Auto-migration for SQLite/Postgres
+            from sqlalchemy import text
+            queries = [
+                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS agreement_url VARCHAR(255)",
+            ]
+            with db.engine.connect() as conn:
+                for q in queries:
+                    try:
+                        conn.execute(text(q))
+                        conn.commit()
+                    except Exception:
+                        try: conn.rollback()
+                        except: pass
+
             from backend.models import User
             if not User.query.filter_by(username='admin').first():
                 u = User(username='admin', role='Owner')
@@ -105,6 +119,27 @@ def create_app():
     app.register_blueprint(finance_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')
+
+    # ─── Debug / Schema Recovery Endpoint ──────────────────────────────────────
+    @app.route('/api/debug/inspect-db')
+    def inspect_db():
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        schema_info = {}
+        for table in inspector.get_table_names():
+            schema_info[table] = [c['name'] for c in inspector.get_columns(table)]
+        
+        # Also check counts for reassurance
+        from backend.models import Tenant, Room, Floor
+        try:
+            counts = {
+                "tenants": Tenant.query.count(),
+                "rooms": Room.query.count(),
+                "floors": Floor.query.count()
+            }
+        except: counts = "Error counting"
+        
+        return jsonify({"tables": schema_info, "counts": counts}), 200
 
     # ─── Static Files for Uploads ──────────────────────────────────────────────
     @app.route('/api/docs/<path:filename>')

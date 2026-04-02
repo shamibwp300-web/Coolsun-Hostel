@@ -77,6 +77,7 @@ def create_app():
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_back_url VARCHAR(255)",
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_url VARCHAR(255)",
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_submitted TIMESTAMP",
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS agreement_url VARCHAR(255)",
         ]
         with db.engine.connect() as conn:
             for q in queries:
@@ -161,6 +162,27 @@ def create_app():
     app.register_blueprint(finance_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')
+
+    # ─── Debug / Schema Recovery Endpoint ──────────────────────────────────────
+    @app.route('/api/debug/inspect-db')
+    def inspect_db():
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        schema_info = {}
+        for table in inspector.get_table_names():
+            schema_info[table] = [c['name'] for c in inspector.get_columns(table)]
+        
+        # Also check counts for reassurance
+        from backend.models import Tenant, Room, Floor
+        try:
+            counts = {
+                "tenants": Tenant.query.count(),
+                "rooms": Room.query.count(),
+                "floors": Floor.query.count()
+            }
+        except: counts = "Error counting"
+        
+        return jsonify({"tables": schema_info, "counts": counts}), 200
 
     # ─── Debug Routes ──────────────────────────────────────────────────────────
     @app.route('/api/debug/ping')
