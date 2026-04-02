@@ -77,8 +77,13 @@ def create_app():
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_back_url VARCHAR(255)",
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_url VARCHAR(255)",
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_submitted TIMESTAMP",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS agreement_url VARCHAR(255)",
         ]
+        
+        # Tenants table checks
+        tenant_cols = [c['name'] for c in inspector.get_columns('tenants')]
+        if 'agreement_url' not in tenant_cols:
+            queries.append("ALTER TABLE tenants ADD COLUMN agreement_url VARCHAR(255)")
+            
         with db.engine.connect() as conn:
             for q in queries:
                 try:

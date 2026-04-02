@@ -62,15 +62,21 @@ def create_app():
     try:
         with app.app_context():
             # 🛡️ Structural Guard: Auto-migration for SQLite/Postgres
-            from sqlalchemy import text
-            queries = [
-                "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS agreement_url VARCHAR(255)",
-            ]
+            from sqlalchemy import text, inspect
+            inspector = inspect(db.engine)
+            queries = []
+
+            # Tenants table checks
+            tenant_cols = [c['name'] for c in inspector.get_columns('tenants')]
+            if 'agreement_url' not in tenant_cols:
+                queries.append("ALTER TABLE tenants ADD COLUMN agreement_url VARCHAR(255)")
+            
             with db.engine.connect() as conn:
                 for q in queries:
                     try:
                         conn.execute(text(q))
                         conn.commit()
+                        print(f"✅ AUTO-MIGRATION: {q}")
                     except Exception:
                         try: conn.rollback()
                         except: pass

@@ -109,7 +109,7 @@ def get_tenants():
             "id_card_front_url": t.id_card_front_url,
             "id_card_back_url": t.id_card_back_url,
             "police_form_url": t.police_form_url,
-            # "agreement_url": getattr(t, 'agreement_url', None),
+            "agreement_url": getattr(t, 'agreement_url', None),
             "parent_tenant_id": t.parent_tenant_id,
             "tenancy_type": t.tenancy_type or 'Shared',
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
