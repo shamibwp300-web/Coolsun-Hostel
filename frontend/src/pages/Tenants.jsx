@@ -125,7 +125,23 @@ const Tenants = () => {
     const handleUpdate = async (e) => {
         e.preventDefault();
         try {
-            await axios.put(`/api/tenants/${editingTenant.id}`, editingTenant);
+            const formData = new FormData();
+            // Append all existing fields
+            Object.keys(editingTenant).forEach(key => {
+                if (key !== 'transactions' && key !== 'compliance') {
+                    formData.append(key, editingTenant[key]);
+                }
+            });
+            // Append files if selected
+            if (editingTenant.new_files) {
+                Object.keys(editingTenant.new_files).forEach(field => {
+                    formData.append(field, editingTenant.new_files[field]);
+                });
+            }
+
+            await axios.put(`/api/tenants/${editingTenant.id}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
             setEditingTenant(null);
             fetchTenants();
         } catch (err) {
@@ -607,6 +623,46 @@ const Tenants = () => {
                                                 <div className={`w-4 h-4 bg-white rounded-full transition-transform ${editingTenant.internet_opt_in ? 'translate-x-4' : 'translate-x-0'}`} />
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-4 pt-4 mt-4">
+                                    <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Documents & Verification</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {[
+                                            { id: 'id_front', label: 'ID Front', icon: CreditCard, color: 'text-blue-400' },
+                                            { id: 'id_back', label: 'ID Back', icon: CreditCard, color: 'text-indigo-400' },
+                                            { id: 'police_form', label: 'Police Form', icon: FileText, color: 'text-purple-400' },
+                                            { id: 'agreement', label: 'Agreement Form', icon: FileText, color: 'text-green-400' }
+                                        ].map(doc => (
+                                            <div key={doc.id} className="space-y-2">
+                                                <label className="text-[10px] text-white/40 uppercase tracking-widest block font-bold">{doc.label}</label>
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`p-2 rounded-lg bg-white/5 border border-white/10 ${doc.color} flex items-center gap-2 flex-grow min-w-0`}>
+                                                        <doc.icon size={14} />
+                                                        <span className="text-[10px] truncate max-w-[100px]">
+                                                            {editingTenant.new_files?.[doc.id]?.name || (editingTenant[`${doc.id}_url`] ? 'Uploaded' : 'No File')}
+                                                        </span>
+                                                    </div>
+                                                    <label className="p-2 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer transition-all border border-blue-500/20">
+                                                        <input 
+                                                            type="file" 
+                                                            className="hidden" 
+                                                            accept="image/*,.pdf"
+                                                            onChange={(e) => {
+                                                                const file = e.target.files[0];
+                                                                if (file) {
+                                                                    setEditingTenant({
+                                                                        ...editingTenant,
+                                                                        new_files: { ...editingTenant.new_files, [doc.id]: file }
+                                                                    });
+                                                                }
+                                                            }}
+                                                        />
+                                                        <Save size={14} />
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                                 <button type="submit"

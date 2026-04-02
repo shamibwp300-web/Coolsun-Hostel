@@ -145,14 +145,16 @@ def create_tenant():
             doc_mapping = {
                 'id_front': 'ID_Front',
                 'id_back': 'ID_Back',
-                'police_form': 'Police_Form'
+                'police_form': 'Police_Form',
+                'agreement': 'Agreement'
             }
             
             # Attribute mapping on Tenant model
             attr_mapping = {
                 'id_front': 'id_card_front_url',
                 'id_back': 'id_card_back_url',
-                'police_form': 'police_form_url'
+                'police_form': 'police_form_url',
+                'agreement': 'agreement_url'
             }
             
             # Save file to the persistent upload directory

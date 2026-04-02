@@ -139,7 +139,7 @@ def create_tenant():
             os.makedirs(doc_dir)
 
         doc_mapping = {'id_front': 'ID_Front', 'id_back': 'ID_Back', 'police_form': 'Police_Form', 'agreement': 'Agreement'}
-        attr_mapping = {'id_front': 'id_card_front_url', 'id_back': 'id_card_back_url', 'police_form': 'police_form_url'}
+        attr_mapping = {'id_front': 'id_card_front_url', 'id_back': 'id_card_back_url', 'police_form': 'police_form_url', 'agreement': 'agreement_url'}
 
         for field, doc_type in doc_mapping.items():
             if field in files:

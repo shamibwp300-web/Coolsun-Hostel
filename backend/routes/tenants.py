@@ -138,6 +138,33 @@ def update_tenant(id):
     if 'internet_opt_in' in data:
         tenant.internet_opt_in = bool(data.get('internet_opt_in'))
         
+    # 🛡️ Handle Multiple Document Uploads (ID Front, ID Back, Police Form, Agreement)
+    import os
+    from datetime import datetime
+    doc_dir = current_app.config['UPLOAD_FOLDER']
+    os.makedirs(doc_dir, exist_ok=True)
+    
+    files = request.files
+    doc_fields = {
+        'id_front': 'id_card_front_url',
+        'id_back': 'id_card_back_url',
+        'police_form': 'police_form_url',
+        'agreement': 'agreement_url'
+    }
+    
+    for field, attr in doc_fields.items():
+        if field in files:
+            file = files[field]
+            if file and file.filename != '':
+                ts = int(datetime.now().timestamp())
+                ext = os.path.splitext(file.filename)[1]
+                fname = f"tenant_{tenant.id}_{field}_{ts}{ext}"
+                fpath = os.path.join(doc_dir, fname)
+                file.save(fpath)
+                setattr(tenant, attr, f"/static/uploads/documents/{fname}")
+                if field == 'police_form':
+                    tenant.police_form_submitted = datetime.utcnow()
+
     if 'tenancy_type' in data:
         tenant.tenancy_type = data.get('tenancy_type')
         
@@ -152,7 +179,14 @@ def update_tenant(id):
             tenant.billing_profile.security_deposit = data.get('security_deposit')
         
     db.session.commit()
-    return jsonify({"message": "Successfully updated tenant"}), 200
+    return jsonify({
+        "message": "Successfully updated tenant",
+        "tenant": {
+            "id": tenant.id,
+            "name": tenant.name,
+            "agreement_url": tenant.agreement_url
+        }
+    }), 200
 
 @tenants_bp.route('/tenants/<int:id>', methods=['DELETE'])
 def delete_tenant(id):
