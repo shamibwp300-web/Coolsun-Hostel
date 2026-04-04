@@ -166,6 +166,11 @@ const Tenants = () => {
             
             if (serverError) {
                 alert(`❌ Archive Failed: ${serverError}`);
+                // If it's already archived, refresh to sync view
+                if (serverError.toLowerCase().includes("already archived")) {
+                    setDeleteConfirm(null);
+                    fetchTenants();
+                }
             } else if (status === 500) {
                 alert(`❌ Server Crash (500): The database might be locked. Please try again in a few seconds.`);
             } else {
