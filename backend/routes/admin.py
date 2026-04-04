@@ -53,6 +53,41 @@ def reset_data():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+@admin_bp.route('/admin/reset-ledger', methods=['POST'])
+def reset_ledger_only():
+    """
+    TARGETED RESET: Wipes out ONLY the financial Ledger tracking.
+    This effectively zeroes out "Total Collected", "Pending Current", and "Arrears",
+    but it PRESERVES all Tenants, Rooms, and Expenses safely.
+    """
+    data = request.json or {}
+    if data.get('confirm') != 'RESET_LEDGER_ONLY':
+        return jsonify({"error": "Invalid confirmation token. Send { \"confirm\": \"RESET_LEDGER_ONLY\" }"}), 400
+
+    try:
+        # Delete only from ledger table.
+        db.session.execute(text("DELETE FROM ledger"))
+        db.session.commit()
+        return jsonify({"message": "✅ Financial Ledger effectively cleared successfully. Total Collected & Pending are now 0. Expenses & Tenants are preserved."}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/admin/easy-zero-ledger', methods=['GET'])
+def easy_reset_ledger():
+    """
+    Temporary accessible link for the admin to zero out the ledger
+    by just typing the URL in the browser.
+    """
+    try:
+        db.session.execute(text("DELETE FROM ledger"))
+        db.session.commit()
+        return "<h1>✅ SUCCESS: FINANCIAL LEDGER ZEROD OUT.</h1><p>Total Collected and Pending have been cleared. All your expenses, rooms, and tenants are perfectly safe.</p><a href='/'>Go Back to Dashboard</a>", 200
+    except Exception as e:
+        db.session.rollback()
+        return f"ERROR: {str(e)}", 500
+
 
 @admin_bp.route('/admin/fix_room_floors', methods=['POST'])
 def fix_room_floors():
