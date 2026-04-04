@@ -24,6 +24,7 @@ def get_police_records():
         police_doc = Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).first()
         id_front = Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).first()
         id_back = Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).first()
+        agreement = Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).first()
         
         result.append({
             "id": t.id,
@@ -39,6 +40,7 @@ def get_police_records():
             "police_form_url": t.police_form_url,
             "id_card_front_url": t.id_card_front_url,
             "id_card_back_url": t.id_card_back_url,
+            "agreement_url": getattr(t, 'agreement_url', None) or (agreement.url if agreement else None),
             "submitted_at": t.police_form_submitted.isoformat() if t.police_form_submitted else None
         })
         
@@ -146,17 +148,28 @@ def delete_police_form(document_id):
     tenant = Tenant.query.get(doc.tenant_id)
     
     try:
+        doc_type = doc.type
         doc.delete()
         
-        # Check if there are any other active police forms
-        active_forms = Document.query.filter_by(tenant_id=tenant.id, type='Police_Form', deleted_at=None).count()
-        if active_forms == 0:
-            tenant.police_status = 'Pending'
-            tenant.police_form_submitted = None
-            tenant.compliance_alert = True
+        # Clear the model field if necessary
+        if doc_type == 'ID_Front':
+            tenant.id_card_front_url = None
+        elif doc_type == 'ID_Back':
+            tenant.id_card_back_url = None
+        elif doc_type == 'Agreement':
+            if hasattr(tenant, 'agreement_url'):
+                tenant.agreement_url = None
+        elif doc_type == 'Police_Form':
+            # Check if there are any other active police forms
+            active_forms = Document.query.filter_by(tenant_id=tenant.id, type='Police_Form', deleted_at=None).count()
+            if active_forms == 0:
+                tenant.police_status = 'Pending'
+                tenant.police_form_submitted = None
+                tenant.compliance_alert = True
+                tenant.police_form_url = None
             
         db.session.commit()
-        return jsonify({"message": "Police form removed successfully"}), 200
+        return jsonify({"message": f"{doc_type} removed successfully"}), 200
         
     except Exception as e:
         db.session.rollback()

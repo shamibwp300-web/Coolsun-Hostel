@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt, RotateCcw, Archive } from 'lucide-react';
+import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt, RotateCcw, Archive, Flame } from 'lucide-react';
 import axios from 'axios';
 import DocumentViewerModal from '../components/DocumentViewerModal';
 
@@ -22,6 +22,7 @@ const Tenants = () => {
     });
     const [moveOutLoading, setMoveOutLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+    const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState(null); // { id, name }
     const [showArchived, setShowArchived] = useState(false);
     const [archivedCount, setArchivedCount] = useState(0);
     
@@ -187,6 +188,20 @@ const Tenants = () => {
             fetchTenants();
         } catch (err) {
             alert(err.response?.data?.error || "Restore failed");
+        }
+    };
+
+    const handlePermanentDelete = async () => {
+        if (!permanentDeleteConfirm) return;
+        const { id, name } = permanentDeleteConfirm;
+        try {
+            await axios.delete(`/api/tenants/${id}/permanent`);
+            setPermanentDeleteConfirm(null);
+            alert(`🗑️ ${name} has been permanently deleted.`);
+            fetchTenants();
+        } catch (err) {
+            const serverError = err.response?.data?.error;
+            alert(`❌ ${serverError || 'Permanent delete failed. Please try again.'}`);
         }
     };
 
@@ -476,21 +491,32 @@ const Tenants = () => {
                                         >
                                             <LogOut size={18} />
                                         </button>
-                                        <button
-                                            title="Archive"
-                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
-                                            className="p-2 rounded-lg hover:bg-red-500/20 text-red-500/60 hover:text-red-500 transition-colors"
-                                        >
-                                            <Archive size={18} />
-                                        </button>
-                                        {tenant.is_archived && (
+                                        {!tenant.is_archived && (
                                             <button
-                                                title="Restore"
-                                                onClick={() => handleRestore(tenant)}
-                                                className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors"
+                                                title="Archive"
+                                                onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
+                                                className="p-2 rounded-lg hover:bg-red-500/20 text-red-500/60 hover:text-red-500 transition-colors"
                                             >
-                                                <RotateCcw size={18} />
+                                                <Archive size={18} />
                                             </button>
+                                        )}
+                                        {tenant.is_archived && (
+                                            <>
+                                                <button
+                                                    title="Restore to Active"
+                                                    onClick={() => handleRestore(tenant)}
+                                                    className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors"
+                                                >
+                                                    <RotateCcw size={18} />
+                                                </button>
+                                                <button
+                                                    title="Delete Permanently"
+                                                    onClick={(e) => { e.stopPropagation(); setPermanentDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
+                                                    className="p-2 rounded-lg hover:bg-red-600/30 text-red-400/60 hover:text-red-400 transition-colors"
+                                                >
+                                                    <Flame size={18} />
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </td>
@@ -819,6 +845,40 @@ const Tenants = () => {
                                 <button onClick={handleDelete}
                                     className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-lg shadow-red-500/30">
                                     Archive Now
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ── PERMANENT DELETE CONFIRMATION MODAL ── */}
+            <AnimatePresence>
+                {permanentDeleteConfirm && (
+                    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setPermanentDeleteConfirm(null)}
+                            className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                            className="glass-card w-full max-w-sm p-8 border-red-700/50 shadow-2xl relative z-[1000] text-center">
+                            <div className="w-16 h-16 bg-red-700/30 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                                <Flame size={32} className="text-red-500" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">⚠️ Permanent Delete</h3>
+                            <p className="text-white/60 mb-2">
+                                You are about to <span className="text-red-400 font-bold">permanently delete</span> <span className="text-white font-bold">{permanentDeleteConfirm.name}</span>.
+                            </p>
+                            <p className="text-red-400/80 text-xs bg-red-900/20 border border-red-700/30 rounded-xl p-3 mb-6">
+                                ⛔ This action is <strong>irreversible</strong>. All financial records, documents, and ledger history for this tenant will be permanently erased from the database.
+                            </p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setPermanentDeleteConfirm(null)}
+                                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
+                                    Cancel
+                                </button>
+                                <button onClick={handlePermanentDelete}
+                                    className="flex-1 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow-lg shadow-red-700/40 flex items-center justify-center gap-2">
+                                    <Flame size={16} /> Delete Forever
                                 </button>
                             </div>
                         </motion.div>

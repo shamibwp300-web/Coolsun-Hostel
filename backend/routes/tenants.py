@@ -234,6 +234,28 @@ def restore_tenant(id):
     db.session.commit()
     return jsonify({"message": "Successfully restored tenant"}), 200
 
+@tenants_bp.route('/tenants/<int:id>/permanent', methods=['DELETE'])
+def permanently_delete_tenant(id):
+    """Permanently delete an already-archived tenant and all their linked data."""
+    try:
+        tenant = Tenant.query.get(id)
+        if not tenant:
+            return jsonify({"error": "Tenant not found"}), 404
+        if not tenant.deleted_at:
+            return jsonify({"error": "Tenant must be archived first before permanent deletion"}), 400
+        
+        tenant_name = tenant.name
+        # Delete all linked records first to avoid FK constraint issues
+        from backend.models import Ledger, Document
+        Ledger.query.filter_by(tenant_id=id).delete()
+        Document.query.filter_by(tenant_id=id).delete()
+        db.session.delete(tenant)
+        db.session.commit()
+        return jsonify({"message": f"Tenant '{tenant_name}' permanently deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Permanent delete failed: {str(e)}"}), 500
+
 import csv
 from io import StringIO
 from datetime import datetime
