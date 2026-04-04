@@ -1,8 +1,30 @@
 from flask import Blueprint, jsonify, request
-from backend.models import db, Room, MeterReading, Ledger, WaterBill, InternetBill
+from backend.models import db, Room, MeterReading, Ledger, WaterBill, InternetBill, SystemSetting
 from datetime import datetime
 
 utilities_bp = Blueprint('utilities', __name__)
+
+@utilities_bp.route('/utilities/global-cost', methods=['GET', 'POST'])
+def global_unit_cost():
+    if request.method == 'GET':
+        setting = SystemSetting.query.filter_by(key='electricity_unit_cost').first()
+        cost = float(setting.value) if setting and setting.value else 45.0
+        return jsonify({"unit_cost": cost}), 200
+        
+    if request.method == 'POST':
+        data = request.json
+        new_cost = data.get('unit_cost')
+        if new_cost is None:
+            return jsonify({"error": "unit_cost is required"}), 400
+            
+        setting = SystemSetting.query.filter_by(key='electricity_unit_cost').first()
+        if not setting:
+            setting = SystemSetting(key='electricity_unit_cost')
+            db.session.add(setting)
+            
+        setting.value = str(new_cost)
+        db.session.commit()
+        return jsonify({"message": "Global unit cost updated", "unit_cost": float(new_cost)}), 200
 
 @utilities_bp.route('/utilities/meter-reading', methods=['POST'])
 def add_reading():

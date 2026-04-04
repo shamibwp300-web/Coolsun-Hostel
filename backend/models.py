@@ -198,6 +198,12 @@ class AuditLog(db.Model):
     action = db.Column(db.String(255))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class SystemSetting(db.Model):
+    __tablename__ = "system_settings"
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.String(255))
+
 class Expense(db.Model, SoftDeleteMixin):
     __tablename__ = "expenses"
     id = db.Column(db.Integer, primary_key=True)
