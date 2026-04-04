@@ -318,11 +318,14 @@ def add_opening_balance():
     data = request.json
     tenant_id = data.get('tenant_id')
     amount = float(data.get('amount', 0))
-    # balance_type: 'DUE' (owed by tenant) or 'ADVANCE' (paid in advance)
+    # balance_type: 'DUE' (owed by tenant), 'ADVANCE' (paid in advance), or 'OWNER_FUND' (capital injection)
     balance_type = data.get('balance_type', 'DUE')
     
-    if not tenant_id or amount <= 0:
-        return jsonify({"error": "Invalid data"}), 400
+    if amount <= 0:
+        return jsonify({"error": "Invalid amount"}), 400
+        
+    if balance_type != 'OWNER_FUND' and not tenant_id:
+        return jsonify({"error": "Tenant is required for this balance type"}), 400
         
     if balance_type == 'DUE':
         # Create a PENDING entry (Receivable)
@@ -332,6 +335,16 @@ def add_opening_balance():
             type='OPENING_BALANCE',
             status='PENDING',
             description="Manual Opening Balance (Due)"
+        )
+    elif balance_type == 'OWNER_FUND':
+        # Create a PAID entry (Capital Injection)
+        entry = Ledger(
+            tenant_id=None,
+            amount=amount,
+            type='OWNER_FUND',
+            status='PAID',
+            payment_method='Manual Entry',
+            description="Owner Capital / Funds Added"
         )
     else:
         # Create a PAID entry (Advance/Credit)

@@ -167,7 +167,8 @@ const Finance = () => {
     };
 
     const handleOpeningBalanceSubmit = async () => {
-        if (!openingBalanceForm.tenant_id || !openingBalanceForm.amount) return alert("Select tenant and enter amount");
+        if (openingBalanceForm.balance_type !== 'OWNER_FUND' && !openingBalanceForm.tenant_id) return alert("Select tenant");
+        if (!openingBalanceForm.amount) return alert("Enter amount");
         setLoading(true);
         try {
             await axios.post('/api/finance/opening-balance', openingBalanceForm);
@@ -314,16 +315,21 @@ const Finance = () => {
                                 <button onClick={() => setShowOpeningBalanceModal(false)} className="text-white/30 hover:text-white"><X size={20} /></button>
                             </div>
                             <div className="space-y-4">
-                                <div className="flex bg-white/5 p-1 rounded-xl mb-2">
+                                <div className="flex bg-white/5 p-1 rounded-xl mb-4 gap-1">
                                     <button
                                         onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'DUE' })}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${openingBalanceForm.balance_type === 'DUE' ? 'bg-orange-600 text-white shadow-lg' : 'text-white/50 hover:text-white'}`}
-                                    >Previous Due (Owed)</button>
+                                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${openingBalanceForm.balance_type === 'DUE' ? 'bg-orange-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+                                    >Previous Due</button>
                                     <button
                                         onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'ADVANCE' })}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${openingBalanceForm.balance_type === 'ADVANCE' ? 'bg-green-600 text-white shadow-lg' : 'text-white/50 hover:text-white'}`}
-                                    >Advance (Paid)</button>
+                                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${openingBalanceForm.balance_type === 'ADVANCE' ? 'bg-green-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+                                    >Advance</button>
+                                    <button
+                                        onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'OWNER_FUND', tenant_id: '' })}
+                                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${openingBalanceForm.balance_type === 'OWNER_FUND' ? 'bg-purple-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+                                    >Owner Fund</button>
                                 </div>
+                                {openingBalanceForm.balance_type !== 'OWNER_FUND' && (
                                 <div>
                                     <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Select Tenant</label>
                                     <select
@@ -336,8 +342,9 @@ const Finance = () => {
                                         ))}
                                     </select>
                                 </div>
+                                )}
                                 <div>
-                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount (Rs)</label>
+                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount (Rs) {openingBalanceForm.balance_type === 'OWNER_FUND' ? '- Self Addition' : ''}</label>
                                     <input
                                         type="number"
                                         value={openingBalanceForm.amount}
@@ -349,7 +356,7 @@ const Finance = () => {
                                 <button
                                     onClick={handleOpeningBalanceSubmit}
                                     disabled={loading}
-                                    className={`w-full py-3 rounded-xl text-white font-bold tracking-wide mt-4 disabled:opacity-50 transition-all ${openingBalanceForm.balance_type === 'DUE' ? 'bg-orange-600 hover:bg-orange-500' : 'bg-green-600 hover:bg-green-500'}`}
+                                    className={`w-full py-3 rounded-xl text-white font-bold tracking-wide mt-4 disabled:opacity-50 transition-all ${openingBalanceForm.balance_type === 'DUE' ? 'bg-orange-600 hover:bg-orange-500' : openingBalanceForm.balance_type === 'ADVANCE' ? 'bg-green-600 hover:bg-green-500' : 'bg-purple-600 hover:bg-purple-500'}`}
                                 >
                                     {loading ? 'Processing...' : 'Add Balance'}
                                 </button>

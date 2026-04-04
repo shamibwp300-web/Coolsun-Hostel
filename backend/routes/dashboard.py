@@ -50,13 +50,13 @@ def get_dashboard_summary():
     try:
         # Base queries
         collected_query = db.session.query(func.coalesce(func.sum(Ledger.amount), 0.0)).filter(
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE']),
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE', 'OWNER_FUND']),
             Ledger.status == 'PAID',
             Ledger.deleted_at == None
         )
         
         pending_query = db.session.query(func.coalesce(func.sum(Ledger.amount), 0.0)).filter(
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE']),
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'DEPOSIT', 'UTILITY', 'FINE', 'OPENING_BALANCE', 'OWNER_FUND']),
             Ledger.status == 'PENDING',
             Ledger.deleted_at == None
         )
