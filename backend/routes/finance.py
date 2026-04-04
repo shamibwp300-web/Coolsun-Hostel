@@ -357,6 +357,10 @@ def add_opening_balance():
             description="Manual Opening Balance (Advance/Credit)"
         )
         
-    db.session.add(entry)
-    db.session.commit()
-    return jsonify({"message": "Opening balance added successfully"}), 201
+    try:
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({"message": "Opening balance added successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Database error details: {str(e)}"}), 500

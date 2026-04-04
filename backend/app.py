@@ -70,6 +70,12 @@ def create_app():
             tenant_cols = [c['name'] for c in inspector.get_columns('tenants')]
             if 'agreement_url' not in tenant_cols:
                 queries.append("ALTER TABLE tenants ADD COLUMN agreement_url VARCHAR(255)")
+                
+            # Ledger table checks
+            if 'ledger' in inspector.get_table_names():
+                ledger_cols = [c['name'] for c in inspector.get_columns('ledger')]
+                if 'payment_method' not in ledger_cols:
+                    queries.append("ALTER TABLE ledger ADD COLUMN payment_method VARCHAR(50) DEFAULT 'Cash'")
             
             with db.engine.connect() as conn:
                 for q in queries:
