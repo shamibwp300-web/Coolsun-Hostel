@@ -324,8 +324,8 @@ def add_opening_balance():
     if amount <= 0:
         return jsonify({"error": "Invalid amount"}), 400
         
-    if balance_type != 'OWNER_FUND' and not tenant_id:
-        return jsonify({"error": "Tenant is required for this balance type"}), 400
+    if not tenant_id:
+        return jsonify({"error": "System Database Note: Please select ANY tenant from the dropdown. This will NOT affect their personal due balance."}), 400
         
     if balance_type == 'DUE':
         # Create a PENDING entry (Receivable)
@@ -339,7 +339,7 @@ def add_opening_balance():
     elif balance_type == 'OWNER_FUND':
         # Create a PAID entry (Capital Injection)
         entry = Ledger(
-            tenant_id=None,
+            tenant_id=tenant_id,
             amount=amount,
             type='OWNER_FUND',
             status='PAID',

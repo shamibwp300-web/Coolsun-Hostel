@@ -167,7 +167,7 @@ const Finance = () => {
     };
 
     const handleOpeningBalanceSubmit = async () => {
-        if (openingBalanceForm.balance_type !== 'OWNER_FUND' && !openingBalanceForm.tenant_id) return alert("Select tenant");
+        if (!openingBalanceForm.tenant_id) return alert("System requires selecting a tenant for DB constraints (it won't affect their balance).");
         if (!openingBalanceForm.amount) return alert("Enter amount");
         setLoading(true);
         try {
@@ -325,13 +325,15 @@ const Finance = () => {
                                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${openingBalanceForm.balance_type === 'ADVANCE' ? 'bg-green-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
                                     >Advance</button>
                                     <button
-                                        onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'OWNER_FUND', tenant_id: '' })}
+                                        onClick={() => setOpeningBalanceForm({ ...openingBalanceForm, balance_type: 'OWNER_FUND' })}
                                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${openingBalanceForm.balance_type === 'OWNER_FUND' ? 'bg-purple-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
                                     >Owner Fund</button>
                                 </div>
-                                {openingBalanceForm.balance_type !== 'OWNER_FUND' && (
+                                
                                 <div>
-                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Select Tenant</label>
+                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">
+                                        Select Tenant {openingBalanceForm.balance_type === 'OWNER_FUND' && <span className="text-purple-400 capitalize">(Required for DB, Won't affect their balance)</span>}
+                                    </label>
                                     <select
                                         value={openingBalanceForm.tenant_id}
                                         onChange={e => setOpeningBalanceForm({ ...openingBalanceForm, tenant_id: e.target.value })}
@@ -342,7 +344,7 @@ const Finance = () => {
                                         ))}
                                     </select>
                                 </div>
-                                )}
+                                
                                 <div>
                                     <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount (Rs) {openingBalanceForm.balance_type === 'OWNER_FUND' ? '- Self Addition' : ''}</label>
                                     <input
