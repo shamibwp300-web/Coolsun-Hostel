@@ -338,8 +338,10 @@ def add_opening_balance():
         )
     elif balance_type == 'OWNER_FUND':
         # Create a PAID entry (Capital Injection)
+        # We use System ID 0 to represent Owner Equity professionally
+        # This completely resolves the database NOT NULL constraint securely
         entry = Ledger(
-            tenant_id=None,
+            tenant_id=0,
             amount=amount,
             type='OWNER_FUND',
             status='PAID',
