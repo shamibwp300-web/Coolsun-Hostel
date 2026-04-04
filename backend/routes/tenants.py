@@ -245,10 +245,15 @@ def permanently_delete_tenant(id):
             return jsonify({"error": "Tenant must be archived first before permanent deletion"}), 400
         
         tenant_name = tenant.name
-        # Delete all linked records first to avoid FK constraint issues
-        from backend.models import Ledger, Document
-        Ledger.query.filter_by(tenant_id=id).delete()
-        Document.query.filter_by(tenant_id=id).delete()
+        tenant_id = tenant.id
+
+        # Delete ALL linked records first to avoid FK constraint errors
+        from backend.models import Ledger, Document, BillingProfile, MoveOutRecord
+        Ledger.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+        Document.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+        BillingProfile.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+        MoveOutRecord.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+
         db.session.delete(tenant)
         db.session.commit()
         return jsonify({"message": f"Tenant '{tenant_name}' permanently deleted"}), 200

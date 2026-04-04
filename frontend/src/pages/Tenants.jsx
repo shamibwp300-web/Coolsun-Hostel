@@ -25,6 +25,8 @@ const Tenants = () => {
     const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState(null); // { id, name }
     const [showArchived, setShowArchived] = useState(false);
     const [archivedCount, setArchivedCount] = useState(0);
+    const [archiveLoading, setArchiveLoading] = useState(false);
+    const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
     
     // Add Manual Charge State
     const [chargeModalTenant, setChargeModalTenant] = useState(null);
@@ -152,6 +154,7 @@ const Tenants = () => {
 
     const handleDelete = async () => {
         if (!deleteConfirm) return;
+        setArchiveLoading(true);
         const { id, name } = deleteConfirm;
         try {
             console.log(`Confirming delete for ${name} (ID: ${id})`);
@@ -177,6 +180,8 @@ const Tenants = () => {
             } else {
                 alert(`❌ Failed to archive ${name}. ${err.message}`);
             }
+        } finally {
+            setArchiveLoading(false);
         }
     };
 
@@ -193,6 +198,7 @@ const Tenants = () => {
 
     const handlePermanentDelete = async () => {
         if (!permanentDeleteConfirm) return;
+        setPermanentDeleteLoading(true);
         const { id, name } = permanentDeleteConfirm;
         try {
             await axios.delete(`/api/tenants/${id}/permanent`);
@@ -202,6 +208,8 @@ const Tenants = () => {
         } catch (err) {
             const serverError = err.response?.data?.error;
             alert(`❌ ${serverError || 'Permanent delete failed. Please try again.'}`);
+        } finally {
+            setPermanentDeleteLoading(false);
         }
     };
 
@@ -842,9 +850,9 @@ const Tenants = () => {
                                     className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
                                     Cancel
                                 </button>
-                                <button onClick={handleDelete}
-                                    className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-lg shadow-red-500/30">
-                                    Archive Now
+                                <button onClick={handleDelete} disabled={archiveLoading}
+                                    className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-lg shadow-red-500/30 disabled:opacity-50">
+                                    {archiveLoading ? 'Archiving...' : 'Archive Now'}
                                 </button>
                             </div>
                         </motion.div>
@@ -876,9 +884,9 @@ const Tenants = () => {
                                     className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
                                     Cancel
                                 </button>
-                                <button onClick={handlePermanentDelete}
-                                    className="flex-1 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow-lg shadow-red-700/40 flex items-center justify-center gap-2">
-                                    <Flame size={16} /> Delete Forever
+                                <button onClick={handlePermanentDelete} disabled={permanentDeleteLoading}
+                                    className="flex-1 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow-lg shadow-red-700/40 flex items-center justify-center gap-2 disabled:opacity-50">
+                                    <Flame size={16} /> {permanentDeleteLoading ? 'Deleting...' : 'Delete Forever'}
                                 </button>
                             </div>
                         </motion.div>
