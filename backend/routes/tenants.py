@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from backend.models import db, Tenant, Room, Ledger
+from backend.models import db, Tenant, Room, Ledger, Document
 
 tenants_bp = Blueprint('tenants', __name__)
 
@@ -106,10 +106,10 @@ def get_tenants():
             "rent_amount": float(t.billing_profile.rent_amount) if t.billing_profile and t.billing_profile.rent_amount else 0,
             "security_deposit": float(t.billing_profile.security_deposit) if t.billing_profile and t.billing_profile.security_deposit else 0,
             "internet_opt_in": t.internet_opt_in,
-            "id_card_front_url": t.id_card_front_url,
-            "id_card_back_url": t.id_card_back_url,
-            "police_form_url": t.police_form_url,
-            "agreement_url": getattr(t, 'agreement_url', None),
+            "id_card_front_url": t.id_card_front_url or getattr(Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
+            "id_card_back_url": t.id_card_back_url or getattr(Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
+            "police_form_url": t.police_form_url or getattr(Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
+            "agreement_url": t.agreement_url or getattr(Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
             "parent_tenant_id": t.parent_tenant_id,
             "tenancy_type": t.tenancy_type or 'Shared',
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
@@ -119,9 +119,14 @@ def get_tenants():
 
 @tenants_bp.route('/tenants/<int:id>', methods=['PUT'])
 def update_tenant(id):
-    tenant = Tenant.query_active().filter_by(id=id).first_or_404()
-    data = request.json
+    # Retrieve tenant either active or archived
+    tenant = Tenant.query.get_or_404(id)
     
+    # Standardize data access for both JSON and Form (Multipart)
+    data = request.form if request.form else request.get_json()
+    if not data:
+        data = {}
+        
     tenant.name = data.get('name', tenant.name)
     tenant.phone = data.get('phone', tenant.phone)
     tenant.cnic = data.get('cnic', tenant.cnic)
@@ -136,11 +141,13 @@ def update_tenant(id):
         tenant.bed_label = bed_val
     
     if 'internet_opt_in' in data:
-        tenant.internet_opt_in = bool(data.get('internet_opt_in'))
+        val = data.get('internet_opt_in')
+        tenant.internet_opt_in = str(val).lower() == 'true'
         
     # 🛡️ Handle Multiple Document Uploads (ID Front, ID Back, Police Form, Agreement)
     import os
     from datetime import datetime
+    from flask import current_app
     doc_dir = current_app.config['UPLOAD_FOLDER']
     os.makedirs(doc_dir, exist_ok=True)
     
@@ -161,7 +168,21 @@ def update_tenant(id):
                 fname = f"tenant_{tenant.id}_{field}_{ts}{ext}"
                 fpath = os.path.join(doc_dir, fname)
                 file.save(fpath)
-                setattr(tenant, attr, f"/static/uploads/documents/{fname}")
+                
+                # Standardize to /api/docs/ for frontend access (matches onboarding.py)
+                db_url = f"/api/docs/{fname}"
+                setattr(tenant, attr, db_url)
+                
+                # Also maintain Document table for backward compatibility
+                doc_type_map = {
+                    'id_front': 'ID_Front',
+                    'id_back': 'ID_Back',
+                    'police_form': 'Police_Form',
+                    'agreement': 'Agreement'
+                }
+                new_doc = Document(tenant_id=tenant.id, type=doc_type_map[field], url=db_url)
+                db.session.add(new_doc)
+                
                 if field == 'police_form':
                     tenant.police_form_submitted = datetime.utcnow()
 
@@ -170,7 +191,7 @@ def update_tenant(id):
         
     if 'parent_tenant_id' in data:
         pt_id = data.get('parent_tenant_id')
-        tenant.parent_tenant_id = None if pt_id == '' or pt_id is None else int(pt_id)
+        tenant.parent_tenant_id = None if pt_id in ['', 'null', 'select', None] else int(pt_id)
         
     if tenant.billing_profile:
         if 'rent_amount' in data:
@@ -190,10 +211,21 @@ def update_tenant(id):
 
 @tenants_bp.route('/tenants/<int:id>', methods=['DELETE'])
 def delete_tenant(id):
-    tenant = Tenant.query_active().filter_by(id=id).first_or_404()
-    tenant.delete() # Uses SoftDeleteMixin
-    db.session.commit()
-    return jsonify({"message": "Successfully archived tenant"}), 200
+    try:
+        # Retrieve tenant regardless of active status to see if they exist
+        tenant = Tenant.query.get(id)
+        if not tenant:
+            return jsonify({"error": "Tenant not found in database"}), 404
+            
+        if tenant.deleted_at:
+            return jsonify({"error": f"Tenant {tenant.name} is already archived"}), 400
+            
+        tenant.delete() # Uses SoftDeleteMixin
+        db.session.commit()
+        return jsonify({"message": f"Successfully archived {tenant.name}"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Internal database error: {str(e)}"}), 500
 
 @tenants_bp.route('/tenants/<int:id>/restore', methods=['PUT'])
 def restore_tenant(id):

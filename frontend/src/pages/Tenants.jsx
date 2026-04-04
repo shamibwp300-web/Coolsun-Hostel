@@ -161,7 +161,16 @@ const Tenants = () => {
             fetchTenants();
         } catch (err) {
             console.error("Archive failed:", err);
-            alert(err.response?.data?.error || `Failed to archive ${name}`);
+            const serverError = err.response?.data?.error;
+            const status = err.response?.status;
+            
+            if (serverError) {
+                alert(`❌ Archive Failed: ${serverError}`);
+            } else if (status === 500) {
+                alert(`❌ Server Crash (500): The database might be locked. Please try again in a few seconds.`);
+            } else {
+                alert(`❌ Failed to archive ${name}. ${err.message}`);
+            }
         }
     };
 

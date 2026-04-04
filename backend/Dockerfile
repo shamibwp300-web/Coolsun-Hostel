@@ -21,5 +21,5 @@ RUN chmod -R 777 /app/instance /app/uploads
 
 EXPOSE 5000
 
-# Run with gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "backend.app:create_app()"]
+# Run with gunicorn (Single worker recommended for SQLite to prevent locking)
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "backend.app:create_app()"]

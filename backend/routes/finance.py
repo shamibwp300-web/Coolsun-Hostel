@@ -194,26 +194,29 @@ def manage_expense(expense_id):
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
     from backend.models import Floor
-    current_month_str = datetime.utcnow().strftime('%Y-%m')
+    # Use current local time for billing period
+    now = datetime.now()
+    current_month_str = now.strftime('%Y-%m')
+    display_month = now.strftime('%B %Y')
     generated = 0
     
-    # 1. Generate Rent for Bulk Rented Floors (Fixed Rent for the Bulk Tenant)
+    # 1. Generate Rent for Bulk Rented Floors
     bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
     for f in bulk_floors:
         if not f.bulk_tenant_id:
             continue
             
-        # Check if already billed FOR THIS FLOOR specifically
-        month_label = datetime.utcnow().strftime('%B %Y')
-        floor_description = f"Floor Rent ({f.name}) for {month_label}"
+        floor_description = f"Bulk Floor Rent ({f.name}) - {display_month}"
         
-        existing = Ledger.query.filter_by(
-            tenant_id=f.bulk_tenant_id, 
-            type='RENT', 
-            deleted_at=None
-        ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
+        # Check if already billed for this FLOOR specifically in this month
+        existing = Ledger.query.filter(
+            Ledger.tenant_id == f.bulk_tenant_id, 
+            Ledger.type == 'RENT', 
+            Ledger.deleted_at == None,
+            Ledger.description.contains(f"({f.name})")
+        ).all()
         
-        already_billed = any(e.timestamp and e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
         
         if not already_billed:
             l = Ledger(
@@ -226,40 +229,39 @@ def generate_bulk_rent():
             db.session.add(l)
             generated += 1
 
-    # 2. Generate Rent for Regular Tenants (Skip sub-tenants on bulk-rented floors)
+    # 2. Generate Rent for Regular Tenants
     tenants = Tenant.query.filter_by(deleted_at=None).all()
     for t in tenants:
-        if not t.room:
+        if not t.room or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented):
             continue
             
-        # Skip if the tenant's room belongs to a bulk-rented floor
-        # Do not double-bill the subtenants because their rent is covered by the bulk floor owner
-        if t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
-            continue
-            
-        # Check BOTH RENT and PRIVATE_RENT types
+        # Check if already billed for ANY rent in this month
         existing = Ledger.query.filter(
             Ledger.tenant_id == t.id,
             Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
             Ledger.deleted_at == None
         ).all()
+        
         already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
         
         if not already_billed:
+            # Determine rent amount and type
             rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
+            rent_type = 'PRIVATE_RENT' if t.tenancy_type == 'Private' else 'RENT'
+            type_label = "Full Room" if rent_type == 'PRIVATE_RENT' else "Shared"
             
             l = Ledger(
                 tenant_id=t.id,
                 amount=rent_amount,
-                type='RENT',
+                type=rent_type,
                 status='PENDING',
-                description=f"Rent for {datetime.utcnow().strftime('%B %Y')}"
+                description=f"{type_label} Rent - {display_month}"
             )
             db.session.add(l)
             generated += 1
             
     db.session.commit()
-    return jsonify({"message": f"Generated rent for {generated} profiles (including bulk floors)"}), 200
+    return jsonify({"message": f"Successfully generated {generated} rent invoices for {display_month}."}), 200
 
 @finance_bp.route('/finance/manual-charge', methods=['POST'])
 def add_manual_charge():
