@@ -215,6 +215,23 @@ const Finance = () => {
 
     const totalExpenses = expenses.reduce((acc, curr) => acc + curr.amount, 0);
 
+    const handleZeroLedger = async () => {
+        const userInput = window.prompt(
+            "⚠️ DANGER: This will permanently ZERO OUT Total Collected, Current Pending, and Arrears.\n\nAll Tenants, Rooms, and Expenses will be completely safe.\n\nIf you want to proceed and ZERO out the ledger, type 'CONFIRM' below:"
+        );
+        if (userInput === "CONFIRM") {
+            try {
+                await axios.post('/api/admin/reset-ledger', { confirm: "RESET_LEDGER_ONLY" });
+                alert("✅ SUCCESS! The ledger has been effectively zeroed out. Total Collected and Pending are now 0.");
+                fetchData(); // refresh the numbers
+            } catch (err) {
+                alert("❌ Failed to zero ledger. Please try again.");
+            }
+        } else if (userInput !== null) {
+            alert("Action cancelled. You must type exactly 'CONFIRM' to zero the ledger.");
+        }
+    };
+
     return (
         <div className="space-y-6 relative p-4 md:p-0">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
@@ -222,30 +239,38 @@ const Finance = () => {
                     <h1 className="text-3xl font-bold text-white tracking-tight">Financial Ledger</h1>
                     <p className="text-white/40 text-sm">Real-time Revenue & Expense Tracking</p>
                 </div>
-                <div className="flex space-x-3 w-full md:w-auto">
+                <div className="flex flex-wrap gap-3 w-full md:w-auto">
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setShowPaymentModal(true)}
-                        className="flex-1 md:flex-none px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center shadow-lg shadow-blue-500/20"
+                        className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center shadow-lg shadow-blue-500/20 text-sm"
                     >
-                        <DollarSign size={20} className="mr-2" /> Receive Payment
+                        <DollarSign size={16} className="mr-2" /> Receive Payment
                     </motion.button>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setShowOpeningBalanceModal(true)}
-                        className="flex-1 md:flex-none px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center justify-center shadow-lg shadow-purple-500/20"
+                        className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center justify-center shadow-lg shadow-purple-500/20 text-sm"
                     >
-                        <Plus size={20} className="mr-2" /> Opening Balance
+                        <Plus size={16} className="mr-2" /> Opening Balance
                     </motion.button>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={handleGenerateRent}
-                        className="flex-1 md:flex-none px-6 py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-medium flex items-center justify-center shadow-lg shadow-green-500/20"
+                        className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-medium flex items-center justify-center shadow-lg shadow-green-500/20 text-sm"
                     >
-                        <Calendar size={20} className="mr-2" /> Generate Rent
+                        <Calendar size={16} className="mr-2" /> Generate Rent
+                    </motion.button>
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleZeroLedger}
+                        className="flex-1 md:flex-none px-4 py-2 border border-red-500 bg-red-900/40 hover:bg-red-600 text-red-200 hover:text-white font-bold rounded-xl flex items-center justify-center shadow-lg shadow-red-500/20 text-sm transition-colors"
+                    >
+                        Zero Ledger
                     </motion.button>
                 </div>
             </div>
