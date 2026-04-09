@@ -14,23 +14,45 @@ load_dotenv()
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 def find_best_db():
+    import sqlite3
     potential_paths = [
-        "/app/instance/hostel.db", 
-        "/app/hostel.db",
-        "/app/backend/instance/hostel.db",
+        "/app/backend/instance/hostel.db", # Most likely for sync scripts
+        "/app/instance/hostel.db",         # Coolify volume path
+        "/app/hostel.db",                  # Root fallback
         os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'hostel.db')),
         os.path.abspath(os.path.join(_BASE_DIR, 'hostel.db'))
     ]
-    # Filter to only existing files with size > 0
-    existing = [p for p in potential_paths if os.path.exists(p) and os.path.getsize(p) > 0]
     
-    if existing:
-        # Sort by file size descending to pick the most likely real database
-        existing.sort(key=lambda x: os.path.getsize(x), reverse=True)
-        return existing[0]
+    best_path = None
+    max_data_points = -1
     
-    # Default to the volume-mapped path if none found
-    return "/app/instance/hostel.db"
+    print(f"🔍 SEARCHING FOR REAL DATABASE...")
+    for p in potential_paths:
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            try:
+                conn = sqlite3.connect(p)
+                c = conn.cursor()
+                # Check tenants & rooms as proxy for "real database"
+                c.execute("SELECT COUNT(*) FROM tenants")
+                tenants = c.fetchone()[0]
+                c.execute("SELECT COUNT(*) FROM rooms")
+                rooms = c.fetchone()[0]
+                conn.close()
+                
+                # Calculation to prioritize the real populated database
+                data_points = tenants + (rooms * 0.1)
+                print(f"   - {p}: {tenants} tenants, {rooms} rooms -> {data_points} pts")
+                
+                if data_points > max_data_points:
+                    max_data_points = data_points
+                    best_path = p
+            except Exception as e:
+                print(f"   - {p}: Skipped ({e})")
+                continue
+    
+    final_path = best_path or "/app/instance/hostel.db"
+    print(f"🎯 SELECTED DATABASE: {final_path}")
+    return final_path
 
 _DB_PATH = find_best_db()
 
