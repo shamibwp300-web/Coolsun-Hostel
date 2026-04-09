@@ -12,7 +12,8 @@ load_dotenv()
 
 # ─── Absolute DB path (Fallback for SQLite) ──────────────────────────────────
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-_DB_PATH = os.path.join(_BASE_DIR, 'hostel.db')
+_DB_BASE = "/app/instance" if os.path.exists("/app/instance") else os.path.join(os.path.dirname(__file__), 'instance')
+_DB_PATH = os.path.abspath(os.path.join(_DB_BASE, 'hostel.db'))
 
 def create_app():
     # Configure Flask to serve static files from the React dist folder securely
@@ -53,7 +54,8 @@ def create_app():
             db.create_all()
         
         # --- Auto Schema Migration (Lock) ---
-        from sqlalchemy import text
+        from sqlalchemy import text, inspect
+        inspector = inspect(db.engine)
         queries = [
             "ALTER TABLE floors ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
             "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_tenant_id INTEGER",

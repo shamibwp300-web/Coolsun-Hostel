@@ -12,7 +12,8 @@ load_dotenv()
 
 # ─── Absolute DB path (Fallback for SQLite) ──────────────────────────────────
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'hostel.db'))
+_DB_BASE = "/app/instance" if os.path.exists("/app/instance") else os.path.join(os.path.dirname(__file__), 'instance')
+_DB_PATH = os.path.abspath(os.path.join(_DB_BASE, 'hostel.db'))
 
 # Persistent Upload Folder (Docker Volume mapping)
 # Prioritize /app/uploads if it exists (Prod/Coolify environment)
