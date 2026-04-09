@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from backend.models import db
+import sqlite3
 import os
 from dotenv import load_dotenv
 
@@ -14,7 +15,6 @@ load_dotenv()
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 def find_best_db():
-    import sqlite3
     potential_paths = [
         "/app/backend/instance/hostel.db", # Most likely for sync scripts
         "/app/instance/hostel.db",         # Coolify volume path
@@ -24,35 +24,29 @@ def find_best_db():
     ]
     
     best_path = None
-    max_data_points = -1
+    max_tenants = -1
     
-    print(f"🔍 SEARCHING FOR REAL DATABASE...")
     for p in potential_paths:
-        if os.path.exists(p) and os.path.getsize(p) > 0:
-            try:
-                conn = sqlite3.connect(p)
-                c = conn.cursor()
-                # Check tenants & rooms as proxy for "real database"
-                c.execute("SELECT COUNT(*) FROM tenants")
-                tenants = c.fetchone()[0]
-                c.execute("SELECT COUNT(*) FROM rooms")
-                rooms = c.fetchone()[0]
-                conn.close()
-                
-                # Calculation to prioritize the real populated database
-                data_points = tenants + (rooms * 0.1)
-                print(f"   - {p}: {tenants} tenants, {rooms} rooms -> {data_points} pts")
-                
-                if data_points > max_data_points:
-                    max_data_points = data_points
-                    best_path = p
-            except Exception as e:
-                print(f"   - {p}: Skipped ({e})")
+        try:
+            if not os.path.exists(p) or os.path.getsize(p) == 0:
                 continue
-    
-    final_path = best_path or "/app/instance/hostel.db"
-    print(f"🎯 SELECTED DATABASE: {final_path}")
-    return final_path
+                
+            # Perform a deep check to find real data
+            with sqlite3.connect(p, timeout=5) as conn:
+                cursor = conn.cursor()
+                # Confirm we have a real hostel database
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tenants'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT COUNT(*) FROM tenants WHERE deleted_at IS NULL")
+                    count = cursor.fetchone()[0]
+                    if count > max_tenants:
+                        max_tenants = count
+                        best_path = p
+        except Exception:
+            continue
+            
+    # Default to the most likely target if no populated DB found
+    return best_path or "/app/instance/hostel.db"
 
 _DB_PATH = find_best_db()
 
