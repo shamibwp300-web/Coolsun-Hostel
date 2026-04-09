@@ -320,7 +320,7 @@ const Tenants = () => {
             </div>
 
             {/* Registry Table */}
-            <div className="glass-panel overflow-x-auto rounded-xl pb-24">
+            <div className="glass-panel overflow-x-auto rounded-xl pb-32">
                 <table className="w-full text-left">
                     <thead className="bg-white/5 text-xs uppercase text-white/40 font-semibold tracking-wider">
                         <tr>
@@ -427,7 +427,7 @@ const Tenants = () => {
                                         )}
 
                                         {/* Hover Tooltip Breakdown */}
-                                        <div className="absolute right-0 bottom-full mb-2 w-48 p-3 bg-black/95 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl backdrop-blur-xl">
+                                        <div className="absolute right-0 top-full mt-1 w-48 p-3 bg-black/95 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl backdrop-blur-xl">
                                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2 border-b border-white/5 pb-1">Ledger Summary</h4>
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between text-xs">
