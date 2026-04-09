@@ -10,10 +10,29 @@ from dotenv import load_dotenv
 # Ise shuru mein load karna lazmi hai taake Supabase ka link mil sakay
 load_dotenv()
 
-# ─── Absolute DB path (Fallback for SQLite) ──────────────────────────────────
+# ─── Absolute DB path (Smart Discovery) ──────────────────────────────────────
 _BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-_DB_BASE = "/app/instance" if os.path.exists("/app/instance") else os.path.join(os.path.dirname(__file__), 'instance')
-_DB_PATH = os.path.abspath(os.path.join(_DB_BASE, 'hostel.db'))
+
+def find_best_db():
+    potential_paths = [
+        "/app/instance/hostel.db", 
+        "/app/hostel.db",
+        "/app/backend/instance/hostel.db",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'hostel.db')),
+        os.path.abspath(os.path.join(_BASE_DIR, 'hostel.db'))
+    ]
+    # Filter to only existing files with size > 0
+    existing = [p for p in potential_paths if os.path.exists(p) and os.path.getsize(p) > 0]
+    
+    if existing:
+        # Sort by file size descending to pick the most likely real database
+        existing.sort(key=lambda x: os.path.getsize(x), reverse=True)
+        return existing[0]
+    
+    # Default to the volume-mapped path if none found
+    return "/app/instance/hostel.db"
+
+_DB_PATH = find_best_db()
 
 def create_app():
     # Configure Flask to serve static files from the React dist folder securely
