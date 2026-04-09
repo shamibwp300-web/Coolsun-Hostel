@@ -48,6 +48,7 @@ class Room(db.Model, SoftDeleteMixin):
     capacity = db.Column(db.Integer)
     base_rent = db.Column(db.Numeric(10, 2))
     is_bulk_rented = db.Column(db.Boolean, default=False)
+    meter_number = db.Column(db.String(50), nullable=True)
     tenants = db.relationship("Tenant", backref="room", lazy=True)
     def get_active_tenants(self): return [t for t in self.tenants if t.deleted_at is None]
 

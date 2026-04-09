@@ -35,9 +35,18 @@ def add_reading():
     
     room = Room.query.get_or_404(room_id)
     
-    # Get previous reading
-    last_reading = MeterReading.query.filter_by(room_id=room_id).order_by(MeterReading.reading_date.desc()).first()
-    previous_reading = last_reading.current_reading if last_reading else int(data.get('previous_reading', 0))
+    # Use provided previous reading or fallback to database
+    previous_reading_input = data.get('previous_reading')
+    if previous_reading_input is not None:
+        previous_reading = int(previous_reading_input)
+    else:
+        last_reading = MeterReading.query.filter_by(room_id=room_id).order_by(MeterReading.reading_date.desc()).first()
+        previous_reading = last_reading.current_reading if last_reading else 0
+    
+    # Update meter number if provided
+    meter_number = data.get('meter_number')
+    if meter_number:
+        room.meter_number = meter_number
     
     if current_reading < previous_reading:
         return jsonify({"error": "Current reading cannot be less than previous reading"}), 400
@@ -249,6 +258,7 @@ def rooms_utility_status():
             "room_number": room.number,
             "capacity": room.capacity,
             "occupied_beds": len(room.get_active_tenants()),
+            "meter_number": room.meter_number,
             "internet_opt_in_count": internet_opt_in_count,
             "last_reading": last_reading.current_reading if last_reading else 0,
             "last_reading_date": last_reading.reading_date.strftime('%Y-%m-%d') if last_reading else None,

@@ -9,7 +9,7 @@ const Electricity = () => {
     const [loggingForRoom, setLoggingForRoom] = useState(null); // Electricity
     const [loggingWaterForRoom, setLoggingWaterForRoom] = useState(null); // Water
     const [loggingWifiForRoom, setLoggingWifiForRoom] = useState(null); // Internet
-    const [newReading, setNewReading] = useState({ current_reading: '', unit_cost: 0 });
+    const [newReading, setNewReading] = useState({ current_reading: '', previous_reading: '', unit_cost: 0, meter_number: '' });
     const [newWaterBill, setNewWaterBill] = useState({ amount: '' });
     const [newWifiBill, setNewWifiBill] = useState({ amount: '' });
     const [error, setError] = useState(null);
@@ -32,10 +32,11 @@ const Electricity = () => {
 
     const handleLogClick = (room) => {
         setLoggingForRoom(room);
-        // Default the unit cost to whatever they used last time for this room, or a sensible default
         setNewReading({
             current_reading: '',
-            unit_cost: room.last_unit_cost > 0 ? room.last_unit_cost : 45.0 // Example default roughly based on commercial rates
+            previous_reading: room.last_reading,
+            unit_cost: room.last_unit_cost > 0 ? room.last_unit_cost : 45.0,
+            meter_number: room.meter_number || ''
         });
     };
 
@@ -45,8 +46,9 @@ const Electricity = () => {
             await axios.post('/api/utilities/meter-reading', {
                 room_id: loggingForRoom.room_id,
                 current_reading: newReading.current_reading,
+                previous_reading: newReading.previous_reading,
                 unit_cost: newReading.unit_cost,
-                previous_reading: loggingForRoom.last_reading // Fallback if API needs it
+                meter_number: newReading.meter_number
             });
             setLoggingForRoom(null);
             fetchStatus(); // Refresh the grid
@@ -127,6 +129,12 @@ const Electricity = () => {
                         <div className="flex justify-between items-start mb-6">
                             <div className="h-12 w-12 rounded-xl bg-white/5 flex items-center justify-center font-bold text-lg text-white">
                                 {room.room_number}
+                            </div>
+                            <div className="flex-1 ml-4">
+                                <h4 className="text-white font-medium">Room {room.room_number}</h4>
+                                <div className="text-[10px] text-yellow-400/70 font-mono tracking-wider uppercase">
+                                    {room.meter_number ? `Meter: ${room.meter_number}` : 'No Meter Set'}
+                                </div>
                             </div>
                             <div className="flex flex-col space-y-2">
                                 <button
@@ -277,9 +285,33 @@ const Electricity = () => {
                                 </button>
                             </div>
 
-                            <div className="flex justify-between text-sm bg-black/20 p-4 rounded-xl border border-white/5 mb-6">
-                                <span className="text-white/40 uppercase tracking-wider text-[10px]">Previous Dial</span>
-                                <span className="text-white font-mono">{loggingForRoom.last_reading.toString().padStart(5, '0')}</span>
+                            <div className="space-y-4 mb-6">
+                                <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex flex-col group focus-within:border-yellow-500/30 transition-all">
+                                    <label className="text-white/30 uppercase tracking-widest text-[10px] mb-2 font-bold flex justify-between">
+                                        Meter Number
+                                        <span className="text-[8px] text-yellow-500/50">*Assigned to room</span>
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        value={newReading.meter_number || ''}
+                                        onChange={e => setNewReading({ ...newReading, meter_number: e.target.value })}
+                                        className="bg-transparent text-white font-mono text-2xl focus:outline-none placeholder:text-white/10"
+                                        placeholder="Enter Meter #"
+                                    />
+                                </div>
+                                <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex flex-col group focus-within:border-yellow-500/30 transition-all">
+                                    <label className="text-white/30 uppercase tracking-widest text-[10px] mb-2 font-bold flex justify-between">
+                                        Previous Dial
+                                        <span className="text-[8px] text-yellow-500/50">*Editable for corrections</span>
+                                    </label>
+                                    <input 
+                                        type="number"
+                                        value={newReading.previous_reading}
+                                        onChange={e => setNewReading({ ...newReading, previous_reading: e.target.value })}
+                                        className="bg-transparent text-white font-mono text-2xl focus:outline-none placeholder:text-white/10"
+                                        placeholder="00000"
+                                    />
+                                </div>
                             </div>
 
                             <form onSubmit={handleSaveReading} className="space-y-6">
@@ -288,13 +320,13 @@ const Electricity = () => {
                                     <input
                                         required
                                         type="number"
-                                        min={loggingForRoom.last_reading}
+                                        min={newReading.previous_reading}
                                         value={newReading.current_reading}
                                         onChange={e => setNewReading({ ...newReading, current_reading: e.target.value })}
                                         className="glass-input w-full h-14 px-4 rounded-xl text-2xl font-mono tracking-widest text-center"
                                         placeholder="00000"
                                     />
-                                    {newReading.current_reading && newReading.current_reading < loggingForRoom.last_reading && (
+                                    {newReading.current_reading && parseFloat(newReading.current_reading) < parseFloat(newReading.previous_reading || 0) && (
                                         <p className="text-red-400 text-xs mt-2">Current reading cannot be lower than the previous reading.</p>
                                     )}
                                 </div>
@@ -312,22 +344,22 @@ const Electricity = () => {
                                 </div>
 
                                 {/* Dynamic Real-time Calculation */}
-                                {newReading.current_reading > loggingForRoom.last_reading && newReading.unit_cost > 0 && (
+                                {newReading.current_reading > parseFloat(newReading.previous_reading || 0) && newReading.unit_cost > 0 && (
                                     <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                                         <div className="flex justify-between text-xs text-white/60 mb-1">
                                             <span>Units Consumed</span>
-                                            <span>{newReading.current_reading - loggingForRoom.last_reading}</span>
+                                            <span>{newReading.current_reading - newReading.previous_reading}</span>
                                         </div>
                                         <div className="flex justify-between text-lg font-bold text-yellow-400">
                                             <span>Calculated Bill</span>
-                                            <span>Rs. {((newReading.current_reading - loggingForRoom.last_reading) * newReading.unit_cost).toLocaleString()}</span>
+                                            <span>Rs. {((newReading.current_reading - newReading.previous_reading) * newReading.unit_cost).toLocaleString()}</span>
                                         </div>
                                     </div>
                                 )}
 
                                 <button
                                     type="submit"
-                                    disabled={!newReading.current_reading || newReading.current_reading < loggingForRoom.last_reading}
+                                    disabled={!newReading.current_reading || parseFloat(newReading.current_reading) < parseFloat(newReading.previous_reading || 0)}
                                     className="w-full py-4 mt-4 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 disabled:bg-gray-700 text-white rounded-xl font-bold flex items-center justify-center transition-all shadow-lg shadow-yellow-500/20"
                                 >
                                     <Save size={18} className="mr-2" /> Log & Calculate Bill
