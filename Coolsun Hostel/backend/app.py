@@ -56,128 +56,94 @@ def create_app():
     app = Flask(__name__, static_folder=_FRONTEND_DIST, static_url_path='/')
     
     # 🛰️ DATABASE CONFIGURATION
-    # Agar .env mein DATABASE_URL hai (Supabase), toh wo use hoga. 
-    # Agar nahi hai, toh purana hostel.db (SQLite) chale ga.
     supabase_url = os.getenv('DATABASE_URL')
     if supabase_url and supabase_url.startswith("postgres://"):
-        # Fix for SQLAlchemy (Postgresql:// instead of postgres://)
         supabase_url = supabase_url.replace("postgres://", "postgresql://", 1)
     
     app.config['SQLALCHEMY_DATABASE_URI'] = supabase_url or f'sqlite:///{_DB_PATH}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
     
+    # 🛰️ EMERGENCY SCHEMA REPAIR FUNCTION
+    def repair_schema(engine):
+        from sqlalchemy import text, inspect
+        inspector = inspect(engine)
+        try:
+            tables = inspector.get_table_names()
+        except Exception: return # Engine not ready
+        
+        with engine.connect() as conn:
+            for table in tables:
+                try:
+                    columns = [c['name'] for c in inspector.get_columns(table)]
+                    # 1. Add deleted_at to all tables (Safe and required for SoftDeleteMixin)
+                    if 'deleted_at' not in columns:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN deleted_at DATETIME"))
+                        conn.commit()
+                        print(f"✅ AUTO-REPAIR: Added 'deleted_at' to {table}")
+                    
+                    # 2. Add meter_number to rooms specifically
+                    if table == 'rooms' and 'meter_number' not in columns:
+                        conn.execute(text("ALTER TABLE rooms ADD COLUMN meter_number VARCHAR(50)"))
+                        conn.commit()
+                        print(f"✅ AUTO-REPAIR: Added 'meter_number' to rooms")
+                except Exception as e:
+                    print(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
+                    try: conn.rollback()
+                    except: pass
+    
     # ─── Production Security ─────────────────────────────────────────────────────
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     
-    # ─── Cloudflare Proxy Fix ───────────────────────────────────────────────────
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-    # ─── CORS ───────────────────────────────────────────────────────────────────
-    # Local development aur Live site dono ke liye allow kiya hai
     CORS(app, resources={r"/api/*": {"origins": ["https://hostel.coolsun.co.uk", "http://localhost:5173", "http://localhost:3000"]}})
 
     db.init_app(app)
 
-    # Auto-create tables and Seed default users on startup
-    with app.app_context():
-        is_prod = "supabase" in app.config['SQLALCHEMY_DATABASE_URI'].lower()
-        
-        # 🛡️ Structural Guard: Auto-create and migration only for SQLite by default
-        if not is_prod or os.getenv('ALLOW_MIGRATIONS_IN_PROD') == 'TRUE':
+    # 1. Run Repair & Sync
+    try:
+        with app.app_context():
+            repair_schema(db.engine)
             db.create_all()
-        
-        # --- Auto Schema Migration (Lock) ---
-        from sqlalchemy import text, inspect
-        inspector = inspect(db.engine)
-        queries = [
-            "ALTER TABLE floors ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_tenant_id INTEGER",
-            "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_rent_amount NUMERIC(10, 2)",
-            "ALTER TABLE floors ADD COLUMN IF NOT EXISTS bulk_security_deposit NUMERIC(10, 2)",
-            "ALTER TABLE floors ADD COLUMN IF NOT EXISTS max_bulk_capacity INTEGER DEFAULT 30",
-            "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS floor_id INTEGER",
-            "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS is_bulk_rented BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS base_rent NUMERIC(10, 2)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS parent_tenant_id INTEGER",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS internet_opt_in BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenancy_type VARCHAR(50)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS emergency_contact VARCHAR(50)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_partial_payment BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS compliance_alert BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS bed_label VARCHAR(20)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS father_name VARCHAR(100)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS permanent_address VARCHAR(255)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_station VARCHAR(100)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_front_url VARCHAR(255)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS id_card_back_url VARCHAR(255)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_url VARCHAR(255)",
-            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS police_form_submitted TIMESTAMP",
-        ]
-        
-        # Tenants table checks
-        tenant_cols = [c['name'] for c in inspector.get_columns('tenants')]
-        if 'agreement_url' not in tenant_cols:
-            queries.append("ALTER TABLE tenants ADD COLUMN agreement_url VARCHAR(255)")
-            
-        with db.engine.connect() as conn:
-            for q in queries:
-                try:
-                    conn.execute(text(q))
-                    conn.commit()
-                except Exception:
-                    try:
-                        conn.rollback()
-                    except:
-                        pass
-        # ------------------------------------
-        
-        # ─── AUTO DATA REPAIR (Floor Linkage Fix) ───
-        try:
-            from backend.models import Floor, Room
-            # Ensure Standard Floors Exist
-            floor_defs = [(0, "Ground Floor"), (1, "First Floor"), (2, "Second Floor"), (3, "Third Floor")]
-            f_map = {}
-            for n, nm in floor_defs:
-                f = Floor.query.filter_by(floor_number=n).first()
-                if not f:
-                    f = Floor(floor_number=n, name=nm)
-                    db.session.add(f)
-                    db.session.flush()
-                f_map[n] = f.id
-            
-            # Link all Rooms to Floor IDs if missing
-            rooms_to_fix = Room.query.filter((Room.floor_id == None)).all()
-            for r in rooms_to_fix:
-                if r.floor in f_map:
-                    r.floor_id = f_map[r.floor]
-            
-            db.session.commit()
-            print("✅ AUTO-REPAIR: Floor Linkage Synchronized.")
-        except Exception as e:
-            print(f"⚠️ Auto-Repair Warning: {str(e)}")
-            db.session.rollback()
-        # ------------------------------------
-        
-        from backend.models import User
-        
-        # 1. Default Admin
-        if not User.query.filter_by(username='admin').first():
-            u = User(username='admin', role='Owner')
-            u.set_password('admin123')
-            db.session.add(u)
-            print("🚀 AUTO-SEED: Admin User (admin/admin123) Created.")
-            
-        # 2. Default Owner
-        if not User.query.filter_by(username='ewardjain@gmail.com').first():
-            o = User(username='ewardjain@gmail.com', role='Owner')
-            o.set_password('Coolsun@23*+')
-            db.session.add(o)
-            print("🚀 AUTO-SEED: Owner User (ewardjain@gmail.com) Created.")
-            
-        db.session.commit()
+    except Exception as e:
+        print(f"Database setup failed: {e}")
 
+    # 2. Auto-seed default users
+    try:
+        with app.app_context():
+            from sqlalchemy import text, inspect
+            inspector = inspect(db.engine)
+            queries = []
+
+            # Tenants table checks
+            tenant_cols = [c['name'] for c in inspector.get_columns('tenants')]
+            if 'agreement_url' not in tenant_cols:
+                queries.append("ALTER TABLE tenants ADD COLUMN agreement_url VARCHAR(255)")
+                
+            with db.engine.connect() as conn:
+                for q in queries:
+                    try:
+                        conn.execute(text(q))
+                        conn.commit()
+                    except Exception:
+                        try: conn.rollback()
+                        except: pass
+
+            from backend.models import User
+            if not User.query.filter_by(username='admin').first():
+                u = User(username='admin', role='Owner')
+                u.set_password('admin123')
+                db.session.add(u)
+                
+            if not User.query.filter_by(username='ewardjain@gmail.com').first():
+                o = User(username='ewardjain@gmail.com', role='Owner')
+                o.set_password('Coolsun@23*+')
+                db.session.add(o)
+                
+            db.session.commit()
+    except Exception as e:
+        print(f"Auto-seed failed: {e}")
     # Register Blueprints
     from backend.routes.onboarding import onboarding_bp
     from backend.routes.dashboard import dashboard_bp

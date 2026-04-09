@@ -74,6 +74,34 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
     app.config['UPLOAD_FOLDER'] = _UPLOAD_DIR
     
+    # 🛰️ EMERGENCY SCHEMA REPAIR FUNCTION
+    def repair_schema(engine):
+        from sqlalchemy import text, inspect
+        inspector = inspect(engine)
+        try:
+            tables = inspector.get_table_names()
+        except Exception: return # Engine not ready
+        
+        with engine.connect() as conn:
+            for table in tables:
+                try:
+                    columns = [c['name'] for c in inspector.get_columns(table)]
+                    # 1. Add deleted_at to all tables (Safe and required for SoftDeleteMixin)
+                    if 'deleted_at' not in columns:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN deleted_at DATETIME"))
+                        conn.commit()
+                        app.logger.info(f"✅ AUTO-REPAIR: Added 'deleted_at' to {table}")
+                    
+                    # 2. Add meter_number to rooms specifically
+                    if table == 'rooms' and 'meter_number' not in columns:
+                        conn.execute(text("ALTER TABLE rooms ADD COLUMN meter_number VARCHAR(50)"))
+                        conn.commit()
+                        app.logger.info(f"✅ AUTO-REPAIR: Added 'meter_number' to rooms")
+                except Exception as e:
+                    app.logger.warning(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
+                    try: conn.rollback()
+                    except: pass
+    
     # ─── Production Security ─────────────────────────────────────────────────────
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -87,12 +115,13 @@ def create_app():
 
     db.init_app(app)
 
-    # 1. Ensure tables exist (Wrapped in try for Gunicorn race conditions)
+    # 1. Run Repair & Sync
     try:
         with app.app_context():
+            repair_schema(db.engine)
             db.create_all()
     except Exception as e:
-        app.logger.warning(f"Database table sync skipped/failed (likely already exists): {e}")
+        app.logger.warning(f"Database setup skipped/failed: {e}")
 
     # 2. Auto-seed default users (Independently wrapped)
     try:
