@@ -113,7 +113,8 @@ def get_tenants():
             "parent_tenant_id": t.parent_tenant_id,
             "tenancy_type": t.tenancy_type or 'Shared',
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
-            "is_archived": t.deleted_at is not None
+            "is_archived": t.deleted_at is not None,
+            "rent_start_date": t.agreement_start_date.strftime('%Y-%m-%d') if t.agreement_start_date else ""
         })
     return jsonify(result), 200
 
@@ -139,6 +140,13 @@ def update_tenant(id):
     bed_val = data.get('bed_label') or data.get('bed')
     if bed_val is not None:
         tenant.bed_label = bed_val
+    
+    if 'rent_start_date' in data and data.get('rent_start_date'):
+        try:
+            from datetime import datetime
+            tenant.agreement_start_date = datetime.strptime(data.get('rent_start_date'), '%Y-%m-%d').date()
+        except:
+            pass
     
     if 'internet_opt_in' in data:
         val = data.get('internet_opt_in')

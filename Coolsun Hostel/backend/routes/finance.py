@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from backend.models import db, Tenant, Ledger, Expense
-from datetime import datetime
+from datetime import datetime, date
 
 finance_bp = Blueprint('finance', __name__)
 
@@ -161,48 +161,56 @@ def manage_expense(expense_id):
 
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
-    from backend.models import Floor
+    from backend.models import Floor, Room
+    data = request.json or {}
+    room_id = data.get('room_id')
     current_month_str = datetime.utcnow().strftime('%Y-%m')
     generated = 0
     
     # 1. Generate Rent for Bulk Rented Floors (Fixed Rent for the Bulk Tenant)
-    bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
-    for f in bulk_floors:
-        if not f.bulk_tenant_id:
-            continue
+    # Skip if we are generating for a specific room unless that room belongs to a bulk-rented floor?
+    # Actually, if room_id is specified, we focus on that room's tenants.
+    if not room_id:
+        bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
+        for f in bulk_floors:
+            if not f.bulk_tenant_id:
+                continue
+                
+            # Check if already billed FOR THIS FLOOR specifically
+            month_label = datetime.utcnow().strftime('%B %Y')
+            floor_description = f"Floor Rent ({f.name}) for {month_label}"
             
-        # Check if already billed FOR THIS FLOOR specifically
-        month_label = datetime.utcnow().strftime('%B %Y')
-        floor_description = f"Floor Rent ({f.name}) for {month_label}"
-        
-        existing = Ledger.query.filter_by(
-            tenant_id=f.bulk_tenant_id, 
-            type='RENT', 
-            deleted_at=None
-        ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
-        
-        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
-        
-        if not already_billed:
-            l = Ledger(
-                tenant_id=f.bulk_tenant_id,
-                amount=f.bulk_rent_amount or 0,
-                type='RENT',
-                status='PENDING',
-                description=floor_description
-            )
-            db.session.add(l)
-            generated += 1
+            existing = Ledger.query.filter_by(
+                tenant_id=f.bulk_tenant_id, 
+                type='RENT', 
+                deleted_at=None
+            ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
+            
+            already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+            
+            if not already_billed:
+                l = Ledger(
+                    tenant_id=f.bulk_tenant_id,
+                    amount=f.bulk_rent_amount or 0,
+                    type='RENT',
+                    status='PENDING',
+                    description=floor_description
+                )
+                db.session.add(l)
+                generated += 1
 
-    # 2. Generate Rent for Regular Tenants (Skip sub-tenants on bulk-rented floors)
-    tenants = Tenant.query.filter_by(deleted_at=None).all()
+    # 2. Generate Rent for Regular Tenants
+    if room_id:
+        tenants = Tenant.query.filter_by(room_id=room_id, deleted_at=None).all()
+    else:
+        tenants = Tenant.query.filter_by(deleted_at=None).all()
+
     for t in tenants:
         if not t.room:
             continue
             
         # Skip if the tenant's room belongs to a bulk-rented floor
-        # Do not double-bill the subtenants because their rent is covered by the bulk floor owner
-        if t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
+        if not room_id and t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
             continue
             
         # Check BOTH RENT and PRIVATE_RENT types
@@ -227,7 +235,79 @@ def generate_bulk_rent():
             generated += 1
             
     db.session.commit()
-    return jsonify({"message": f"Generated rent for {generated} profiles (including bulk floors)"}), 200
+    return jsonify({"message": f"Generated rent for {generated} profiles"}), 200
+
+@finance_bp.route('/finance/room-ledger/<int:room_id>', methods=['GET'])
+def get_room_ledger(room_id):
+    from backend.models import Room
+    room = Room.query.get_or_404(room_id)
+    tenants = Tenant.query.filter_by(room_id=room_id, deleted_at=None).all()
+    
+    res_tenants = []
+    total_room_balance = 0
+    
+    # Separate Primary and Sub-tenants
+    primaries = [t for t in tenants if not t.parent_tenant_id]
+    subs = [t for t in tenants if t.parent_tenant_id]
+    
+    # We want Primary at top, then their respective subs
+    ordered_tenants = []
+    for p in primaries:
+        ordered_tenants.append(p)
+        for s in subs:
+            if s.parent_tenant_id == p.id:
+                ordered_tenants.append(s)
+                
+    # Add any orphans (subs whose parent isn't in this room)
+    for s in subs:
+        if s not in ordered_tenants:
+            ordered_tenants.append(s)
+
+    for t in ordered_tenants:
+        # Calculate balance (similar logic to tenants.py)
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+
+        for ledger in t.transactions:
+            if ledger.deleted_at is None:
+                amt = float(ledger.amount)
+                ltype = ledger.type
+                if ltype in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ltype] += amt
+                        due_by_type[ltype] += amt
+                    else:
+                        due_by_type[ltype] += amt
+
+        rent_bal = max(0, (due_by_type['RENT'] + due_by_type['PRIVATE_RENT']) - (paid_by_type['RENT'] + paid_by_type['PRIVATE_RENT']))
+        sec_bal = max(0, due_by_type['DEPOSIT'] - paid_by_type['DEPOSIT'])
+        util_bal = max(0, due_by_type['UTILITY'] - paid_by_type['UTILITY'])
+        fine_bal = max(0, due_by_type['FINE'] - paid_by_type['FINE'])
+        open_bal = max(0, due_by_type['OPENING_BALANCE'] - paid_by_type['OPENING_BALANCE'])
+        
+        tenant_balance = rent_bal + sec_bal + util_bal + fine_bal + open_bal
+        total_room_balance += tenant_balance
+        
+        res_tenants.append({
+            "id": t.id,
+            "name": t.name,
+            "is_primary": not t.parent_tenant_id,
+            "parent_id": t.parent_tenant_id,
+            "balance": tenant_balance,
+            "breakdown": {
+                "rent": rent_bal,
+                "security": sec_bal,
+                "utility": util_bal,
+                "fine": fine_bal,
+                "opening": open_bal
+            }
+        })
+        
+    return jsonify({
+        "room_number": room.number,
+        "total_balance": total_room_balance,
+        "tenants": res_tenants
+    }), 200
 
 @finance_bp.route('/finance/opening-balance', methods=['POST'])
 def add_opening_balance():

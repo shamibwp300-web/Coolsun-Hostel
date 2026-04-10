@@ -5,7 +5,6 @@ import axios from 'axios';
 
 const Finance = () => {
     const [showExpenseModal, setShowExpenseModal] = useState(false);
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showOpeningBalanceModal, setShowOpeningBalanceModal] = useState(false);
 
     const [summary, setSummary] = useState({ current_collected: 0, current_pending: 0 });
@@ -29,11 +28,6 @@ const Finance = () => {
         description: '',
         subNote: '',
         date: new Date().toISOString().split('T')[0]
-    });
-
-    const [paymentForm, setPaymentForm] = useState({
-        tenant_id: '',
-        amount: ''
     });
 
     const [openingBalanceForm, setOpeningBalanceForm] = useState({
@@ -126,10 +120,10 @@ const Finance = () => {
 
     // Body Scroll Lock for Modal
     useEffect(() => {
-        if (showExpenseModal || showPaymentModal) document.body.style.overflow = 'hidden';
+        if (showExpenseModal) document.body.style.overflow = 'hidden';
         else document.body.style.overflow = 'unset';
         return () => { document.body.style.overflow = 'unset'; };
-    }, [showExpenseModal, showPaymentModal]);
+    }, [showExpenseModal]);
 
     const handleExpenseSubmit = async () => {
         if (!expenseForm.amount || !expenseForm.description) return alert("Please fill details");
@@ -152,20 +146,6 @@ const Finance = () => {
         setLoading(false);
     };
 
-    const handlePaymentSubmit = async () => {
-        if (!paymentForm.tenant_id || !paymentForm.amount) return alert("Select tenant and enter amount");
-        setLoading(true);
-        try {
-            await axios.post('/api/finance/pay', paymentForm);
-            setShowPaymentModal(false);
-            setPaymentForm({ tenant_id: '', amount: '' });
-            fetchData();
-        } catch (e) {
-            alert(e.response?.data?.error || "Error receiving payment");
-        }
-        setLoading(false);
-    };
-
     const handleOpeningBalanceSubmit = async () => {
         if (openingBalanceForm.balance_type !== 'OWNER_FUND' && !openingBalanceForm.tenant_id) return alert("Select tenant");
         if (!openingBalanceForm.amount) return alert("Enter amount");
@@ -179,17 +159,6 @@ const Finance = () => {
             alert(e.response?.data?.error || "Error adding opening balance");
         }
         setLoading(false);
-    };
-
-    const handleGenerateRent = async () => {
-        if (!window.confirm("Generate this month's rent for all active tenants?")) return;
-        try {
-            const res = await axios.post('/api/finance/generate-rent');
-            alert(res.data.message);
-            fetchData();
-        } catch (e) {
-            alert("Error generating rent");
-        }
     };
 
     const handleDeleteExpense = async (id) => {
@@ -243,26 +212,10 @@ const Finance = () => {
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowPaymentModal(true)}
-                        className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center shadow-lg shadow-blue-500/20 text-sm"
-                    >
-                        <DollarSign size={16} className="mr-2" /> Receive Payment
-                    </motion.button>
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
                         onClick={() => setShowOpeningBalanceModal(true)}
                         className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center justify-center shadow-lg shadow-purple-500/20 text-sm"
                     >
                         <Plus size={16} className="mr-2" /> Opening Balance
-                    </motion.button>
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleGenerateRent}
-                        className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-medium flex items-center justify-center shadow-lg shadow-green-500/20 text-sm"
-                    >
-                        <Calendar size={16} className="mr-2" /> Generate Rent
                     </motion.button>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -274,57 +227,6 @@ const Finance = () => {
                     </motion.button>
                 </div>
             </div>
-
-            {/* Receive Payment Modal */}
-            <AnimatePresence>
-                {showPaymentModal && (
-                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            onClick={() => setShowPaymentModal(false)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                            className="glass-card w-full max-w-md p-6 border-blue-500/30 shadow-2xl relative z-[111]">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-white">Receive Payment</h3>
-                                <button onClick={() => setShowPaymentModal(false)} className="text-white/30 hover:text-white"><X size={20} /></button>
-                            </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Select Tenant</label>
-                                    <select
-                                        value={paymentForm.tenant_id}
-                                        onChange={e => setPaymentForm({ ...paymentForm, tenant_id: e.target.value })}
-                                        className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40">
-                                        <option value="">-- Choose Tenant --</option>
-                                        {tenants.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
-                                            <option key={t.id} value={t.id}>
-                                                {t.name} (Room {t.room}) — Current Due: Rs.{t.balance || 0}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-xs uppercase text-white/40 font-medium tracking-wider mb-1 block">Amount Received (Rs)</label>
-                                    <input
-                                        type="number"
-                                        value={paymentForm.amount}
-                                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                                        className="glass-input w-full h-12 px-4 rounded-xl text-lg font-mono"
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <button
-                                    onClick={handlePaymentSubmit}
-                                    disabled={loading}
-                                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold tracking-wide mt-4 disabled:opacity-50"
-                                >
-                                    {loading ? 'Processing...' : 'Mark as Paid'}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* Opening Balance Modal */}
             <AnimatePresence>

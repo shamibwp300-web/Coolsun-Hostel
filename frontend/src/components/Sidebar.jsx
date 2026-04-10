@@ -78,6 +78,8 @@ const Sidebar = ({ mode = 'desktop' }) => {
         <div>
           <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Financial Edge</p>
           <NavItem icon={<Zap size={18} />} label="Utility Billing" to="/electricity" active={location.pathname === '/electricity'} />
+          <NavItem icon={<Calendar size={18} />} label="Generate Rent" to="/finance/generate" active={location.pathname === '/finance/generate'} />
+          <NavItem icon={<DollarSign size={18} />} label="Receive Rent" to="/finance/receive" active={location.pathname === '/finance/receive'} />
           <NavItem icon={<Wallet size={18} />} label="Finance Engine" to="/finance" active={location.pathname === '/finance'} />
         </div>
 

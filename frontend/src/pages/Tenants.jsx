@@ -131,7 +131,7 @@ const Tenants = () => {
             const formData = new FormData();
             // Append all existing fields
             Object.keys(editingTenant).forEach(key => {
-                if (key !== 'transactions' && key !== 'compliance') {
+                if (key !== 'transactions' && key !== 'compliance' && editingTenant[key] !== null && editingTenant[key] !== undefined) {
                     formData.append(key, editingTenant[key]);
                 }
             });
@@ -419,10 +419,10 @@ const Tenants = () => {
                                         </div>
 
                                         {(tenant.rent_balance > 0 || tenant.security_balance > 0 || tenant.utility_balance > 0) && (
-                                            <div className="flex space-x-1 mt-1">
-                                                {tenant.rent_balance > 0 && <span className="text-[9px] px-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded" title="Rent">R</span>}
-                                                {tenant.security_balance > 0 && <span className="text-[9px] px-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded" title="Security">S</span>}
-                                                {tenant.utility_balance > 0 && <span className="text-[9px] px-1 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded" title="Utility">U</span>}
+                                            <div className="flex flex-col items-end mt-1 space-y-0.5">
+                                                {tenant.rent_balance > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded font-black tracking-widest uppercase">Rent: {tenant.rent_balance}</span>}
+                                                {tenant.security_balance > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded font-black tracking-widest uppercase">Sec: {tenant.security_balance}</span>}
+                                                {tenant.utility_balance > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded font-black tracking-widest uppercase">Util: {tenant.utility_balance}</span>}
                                             </div>
                                         )}
 
@@ -607,15 +607,23 @@ const Tenants = () => {
                                 <div className="space-y-4 pt-4 mt-4">
                                     <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Tenancy & Billing Details</h4>
                                     
-                                    <div>
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Applied Billing System (Initial)</label>
-                                        <select value={editingTenant.tenancy_type || 'Shared'}
-                                            onChange={(e) => setEditingTenant({ ...editingTenant, tenancy_type: e.target.value })}
-                                            className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer select-none">
-                                            <option value="Shared">Pro-Rata Rent (Shared Mode)</option>
-                                            <option value="Shared Full">Full Month Rent (Shared Mode)</option>
-                                            <option value="Private">Full Room Rent (Private Mode)</option>
-                                        </select>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Applied Billing System</label>
+                                            <select value={editingTenant.tenancy_type || 'Shared'}
+                                                onChange={(e) => setEditingTenant({ ...editingTenant, tenancy_type: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer select-none">
+                                                <option value="Shared">Pro-Rata Rent (Shared Mode)</option>
+                                                <option value="Shared Full">Full Month Rent (Shared Mode)</option>
+                                                <option value="Private">Full Room Rent (Private Mode)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Rent Start Date (Billing Start)</label>
+                                            <input type="date" value={editingTenant.rent_start_date || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, rent_start_date: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40 cursor-pointer" />
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">

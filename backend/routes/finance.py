@@ -194,6 +194,9 @@ def manage_expense(expense_id):
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
     from backend.models import Floor
+    data = request.json or {}
+    room_number = data.get('room_number')
+    
     # Use current local time for billing period
     now = datetime.now()
     current_month_str = now.strftime('%Y-%m')
@@ -201,36 +204,48 @@ def generate_bulk_rent():
     generated = 0
     
     # 1. Generate Rent for Bulk Rented Floors
-    bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
-    for f in bulk_floors:
-        if not f.bulk_tenant_id:
-            continue
+    # (Only if no specific room selected, or if the room belongs to a bulk-rented floor)
+    # Since bulk rent is floor-based, we'll only do this if room_number is None
+    if not room_number:
+        bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
+        for f in bulk_floors:
+            if not f.bulk_tenant_id:
+                continue
+                
+            floor_description = f"Bulk Floor Rent ({f.name}) - {display_month}"
             
-        floor_description = f"Bulk Floor Rent ({f.name}) - {display_month}"
-        
-        # Check if already billed for this FLOOR specifically in this month
-        existing = Ledger.query.filter(
-            Ledger.tenant_id == f.bulk_tenant_id, 
-            Ledger.type == 'RENT', 
-            Ledger.deleted_at == None,
-            Ledger.description.contains(f"({f.name})")
-        ).all()
-        
-        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
-        
-        if not already_billed:
-            l = Ledger(
-                tenant_id=f.bulk_tenant_id,
-                amount=f.bulk_rent_amount or 0,
-                type='RENT',
-                status='PENDING',
-                description=floor_description
-            )
-            db.session.add(l)
-            generated += 1
+            # Check if already billed for this FLOOR specifically in this month
+            existing = Ledger.query.filter(
+                Ledger.tenant_id == f.bulk_tenant_id, 
+                Ledger.type == 'RENT', 
+                Ledger.deleted_at == None,
+                Ledger.description.contains(f"({f.name})")
+            ).all()
+            
+            already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+            
+            if not already_billed:
+                l = Ledger(
+                    tenant_id=f.bulk_tenant_id,
+                    amount=f.bulk_rent_amount or 0,
+                    type='RENT',
+                    status='PENDING',
+                    description=floor_description
+                )
+                db.session.add(l)
+                generated += 1
 
     # 2. Generate Rent for Regular Tenants
-    tenants = Tenant.query.filter_by(deleted_at=None).all()
+    query = Tenant.query.filter_by(deleted_at=None)
+    if room_number:
+        from backend.models import Room
+        room_obj = Room.query.filter_by(number=room_number).first()
+        if room_obj:
+            query = query.filter_by(room_id=room_obj.id)
+        else:
+            return jsonify({"error": f"Room {room_number} not found"}), 404
+            
+    tenants = query.all()
     for t in tenants:
         if not t.room or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented):
             continue
@@ -366,3 +381,43 @@ def add_opening_balance():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Database error details: {str(e)}"}), 500
+
+@finance_bp.route('/finance/room-summary/<room_number>', methods=['GET'])
+def get_room_summary(room_number):
+    from backend.models import Room
+    room_obj = Room.query.filter_by(number=room_number, deleted_at=None).first()
+    if not room_obj:
+        return jsonify({"error": f"Room {room_number} not found"}), 404
+        
+    tenants = room_obj.get_active_tenants()
+    
+    primary_tenants = [t for t in tenants if t.parent_tenant_id is None]
+    sub_tenants = [t for t in tenants if t.parent_tenant_id is not None]
+    
+    def get_tenant_summary(t):
+        # Calculate balance from billing_profile or ledger
+        # Assuming we have a helper or can calculate here
+        pending_ledgers = Ledger.query.filter_by(tenant_id=t.id, status='PENDING', deleted_at=None).all()
+        balance = sum(float(l.amount) for l in pending_ledgers)
+        
+        return {
+            "id": t.id,
+            "name": t.name,
+            "phone": t.phone,
+            "balance": balance,
+            "rent_amount": float(t.billing_profile.rent_amount if t.billing_profile else 0),
+            "is_primary": t.parent_tenant_id is None,
+            "bed": t.bed_label or "N/A"
+        }
+
+    res_primary = [get_tenant_summary(t) for t in primary_tenants]
+    res_sub = [get_tenant_summary(t) for t in sub_tenants]
+    
+    total_room_pending = sum(p['balance'] for p in res_primary) + sum(s['balance'] for s in res_sub)
+    
+    return jsonify({
+        "room_number": room_number,
+        "primary": res_primary,
+        "sub_tenants": res_sub,
+        "total_pending": total_room_pending
+    }), 200

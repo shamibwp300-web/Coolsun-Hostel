@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from backend.models import db, Tenant, Room, Ledger, Document
 
 tenants_bp = Blueprint('tenants', __name__)
@@ -108,6 +108,7 @@ def get_tenants():
 
 @tenants_bp.route('/tenants/<int:id>', methods=['PUT'])
 def update_tenant(id):
+    from datetime import datetime
     tenant = Tenant.query_active().filter_by(id=id).first_or_404()
     data = request.json
     
@@ -119,6 +120,19 @@ def update_tenant(id):
     tenant.emergency_contact = data.get('emergency_contact', tenant.emergency_contact)
     tenant.police_station = data.get('police_station', tenant.police_station)
     
+    # Handle dates
+    if data.get('agreement_start_date'):
+        try:
+            tenant.agreement_start_date = datetime.strptime(data.get('agreement_start_date'), '%Y-%m-%d').date()
+        except ValueError:
+            pass # Keep existing or None on format error
+            
+    if data.get('actual_move_in_date'):
+        try:
+            tenant.actual_move_in_date = datetime.strptime(data.get('actual_move_in_date'), '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
     # Accept either 'bed_label' (new) or 'bed' (legacy frontend key)
     bed_val = data.get('bed_label') or data.get('bed')
     if bed_val is not None:
@@ -126,7 +140,6 @@ def update_tenant(id):
     
     # 🛡️ Handle Multiple Document Uploads (ID Front, ID Back, Police Form, Agreement)
     import os
-    from datetime import datetime
     doc_dir = current_app.config['UPLOAD_FOLDER']
     os.makedirs(doc_dir, exist_ok=True)
     
