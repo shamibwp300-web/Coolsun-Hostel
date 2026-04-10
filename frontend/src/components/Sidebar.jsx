@@ -15,7 +15,9 @@ import {
   UserPlus,
   ListChecks,
   LogIn,
-  Building2
+  Building2,
+  Calendar,
+  DollarSign
 } from 'lucide-react';
 
 const Sidebar = ({ mode = 'desktop' }) => {
