@@ -6,6 +6,7 @@ import axios from 'axios';
 const GenerateRent = () => {
     const [mode, setMode] = useState('ALL'); // 'ALL' or 'ROOM'
     const [roomNumber, setRoomNumber] = useState('');
+    const [billingMonth, setBillingMonth] = useState(''); // YYYY-MM
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
 
@@ -22,7 +23,8 @@ const GenerateRent = () => {
         setResult(null);
         try {
             const res = await axios.post('/api/finance/generate-rent', {
-                room_number: mode === 'ROOM' ? roomNumber : null
+                room_number: mode === 'ROOM' ? roomNumber : null,
+                billing_month: billingMonth || null
             });
             setResult({ success: true, message: res.data.message });
             if (mode === 'ROOM') setRoomNumber('');
@@ -93,6 +95,17 @@ const GenerateRent = () => {
                     <div className="glass-panel p-8 rounded-2xl text-center space-y-6 border border-white/5 shadow-2xl">
                         <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto">
                             <Calendar size={40} className={mode === 'ALL' ? 'text-green-400' : 'text-blue-400'} />
+                        </div>
+
+                        <div className="w-full text-left mb-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2 block">Billing Month (Optional)</label>
+                            <input 
+                                type="month" 
+                                value={billingMonth}
+                                onChange={(e) => setBillingMonth(e.target.value)}
+                                className="glass-input w-full h-12 px-4 rounded-xl text-lg font-bold text-white tracking-widest bg-black/40 focus:border-blue-500 mb-2"
+                            />
+                            <p className="text-[10px] text-white/30 font-medium">Leave empty to use the current month.</p>
                         </div>
                         
                         <div className="space-y-2">

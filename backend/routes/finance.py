@@ -197,10 +197,25 @@ def generate_bulk_rent():
     data = request.json or {}
     room_number = data.get('room_number')
     
-    # Use current local time for billing period
+    # Use current local time for billing period or provided month
     now = datetime.now()
-    current_month_str = now.strftime('%Y-%m')
-    display_month = now.strftime('%B %Y')
+    billing_month_str = data.get('billing_month')
+    
+    if billing_month_str:
+        try:
+            target_date = datetime.strptime(billing_month_str, '%Y-%m')
+            current_month_str = billing_month_str
+            display_month = target_date.strftime('%B %Y')
+            timestamp = target_date
+        except:
+            current_month_str = now.strftime('%Y-%m')
+            display_month = now.strftime('%B %Y')
+            timestamp = now
+    else:
+        current_month_str = now.strftime('%Y-%m')
+        display_month = now.strftime('%B %Y')
+        timestamp = now
+        
     generated = 0
     
     # 1. Generate Rent for Bulk Rented Floors
@@ -230,7 +245,8 @@ def generate_bulk_rent():
                     amount=f.bulk_rent_amount or 0,
                     type='RENT',
                     status='PENDING',
-                    description=floor_description
+                    description=floor_description,
+                    timestamp=timestamp
                 )
                 db.session.add(l)
                 generated += 1
@@ -270,7 +286,8 @@ def generate_bulk_rent():
                 amount=rent_amount,
                 type=rent_type,
                 status='PENDING',
-                description=f"{type_label} Rent - {display_month}"
+                description=f"{type_label} Rent - {display_month}",
+                timestamp=timestamp
             )
             db.session.add(l)
             generated += 1
