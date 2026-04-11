@@ -255,18 +255,37 @@ def generate_bulk_rent():
     query = Tenant.query.filter_by(deleted_at=None)
     if room_number:
         from backend.models import Room
-        room_obj = Room.query.filter_by(number=room_number, deleted_at=None).first()
+        # Use exact number but try to handle common issues like leading/trailing space in request
+        clean_num = str(room_number).strip()
+        room_obj = Room.query.filter_by(number=clean_num, deleted_at=None).first()
         if room_obj:
             query = query.filter_by(room_id=room_obj.id)
         else:
-            return jsonify({"error": f"Room {room_number} not found"}), 404
+            return jsonify({"error": f"Active Room {room_number} not found"}), 404
             
     tenants = query.all()
+    
+    # Diagnosis: If targeting a specific room and no tenants found, maybe room_id mismatch?
+    if room_number and not tenants:
+        app.logger.warning(f"No active tenants found for room number {room_number} (ID {room_obj.id if room_obj else '??'})")
+
     for t in tenants:
-        if not t.room or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented):
-            continue
+        # If targeting a specific room, we bypass the bulk-floor skip 
+        # because the admin is explicitly asking for this room's invoices.
+        if not room_number:
+            if not t.room or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented):
+                continue
+        
+        # Determine rent amount and type early
+        rent_amount = 0
+        if t.billing_profile and t.billing_profile.rent_amount:
+            rent_amount = float(t.billing_profile.rent_amount)
+        elif t.room and t.room.base_rent:
+            rent_amount = float(t.room.base_rent)
+        else:
+            rent_amount = 10000 # Fallback
             
-        # 1. Generate Rent for the specified month
+        # Check if already billed for ANY rent in this month
         existing_rent = Ledger.query.filter(
             Ledger.tenant_id == t.id,
             Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
@@ -276,8 +295,6 @@ def generate_bulk_rent():
         already_billed_rent = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing_rent)
         
         if not already_billed_rent:
-            # Determine rent amount and type
-            rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
             rent_type = 'PRIVATE_RENT' if t.tenancy_type == 'Private' else 'RENT'
             type_label = "Full Room" if rent_type == 'PRIVATE_RENT' else "Shared"
             

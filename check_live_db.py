@@ -1,12 +1,9 @@
-import sqlite3
-import os
+import urllib.request
+import json
 
-db_path = r"D:\Coolsun Hostel\Coolsun Hostel\hostel.db"
-
-conn = sqlite3.connect(db_path)
-cursor = conn.cursor()
-cursor.execute("SELECT id, amount, date FROM expenses")
-rows = cursor.fetchall()
-for row in rows:
-    print(f"Row: {row}")
-conn.close()
+try:
+    with urllib.request.urlopen("https://hostel.coolsun.co.uk/api/debug/inspect-db") as response:
+        data = json.loads(response.read().decode())
+        print(json.dumps(data, indent=2))
+except Exception as e:
+    print(f"Error: {e}")
