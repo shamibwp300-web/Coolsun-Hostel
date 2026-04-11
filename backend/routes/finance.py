@@ -255,7 +255,7 @@ def generate_bulk_rent():
     query = Tenant.query.filter_by(deleted_at=None)
     if room_number:
         from backend.models import Room
-        room_obj = Room.query.filter_by(number=room_number).first()
+        room_obj = Room.query.filter_by(number=room_number, deleted_at=None).first()
         if room_obj:
             query = query.filter_by(room_id=room_obj.id)
         else:
