@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Building, Search, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Calendar, Building, Search, CheckCircle, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import axios from 'axios';
 
 const GenerateRent = () => {
@@ -13,25 +13,33 @@ const GenerateRent = () => {
     const handleGenerate = async () => {
         if (mode === 'ROOM' && !roomNumber) return alert("Please enter a room number");
         
-        const confirmMsg = mode === 'ALL' 
-            ? "Generate this month's rent for ALL active tenants in the entire hostel?" 
-            : `Generate this month's rent for Room ${roomNumber}?`;
+        let confirmMsg = "";
+        let endpoint = '/api/finance/generate-rent';
+        let payload = {};
+
+        if (mode === 'SECURITY') {
+            confirmMsg = "Sweep all active tenants and attach Security Deposit invoices for any who are missing it?";
+            endpoint = '/api/finance/generate-security';
+        } else if (mode === 'ALL') {
+            confirmMsg = "Generate this month's rent for ALL active tenants in the entire hostel?";
+            payload = { billing_month: billingMonth || null };
+        } else {
+            confirmMsg = `Generate this month's rent for Room ${roomNumber}?`;
+            payload = { room_number: roomNumber, billing_month: billingMonth || null };
+        }
             
         if (!window.confirm(confirmMsg)) return;
 
         setLoading(true);
         setResult(null);
         try {
-            const res = await axios.post('/api/finance/generate-rent', {
-                room_number: mode === 'ROOM' ? roomNumber : null,
-                billing_month: billingMonth || null
-            });
+            const res = await axios.post(endpoint, payload);
             setResult({ success: true, message: res.data.message });
             if (mode === 'ROOM') setRoomNumber('');
         } catch (e) {
             setResult({ 
                 success: false, 
-                message: e.response?.data?.error || "Error generating rent. This might happen if rent is already generated for this period." 
+                message: e.response?.data?.error || "Error generating. This might happen if records are already created." 
             });
         }
         setLoading(false);
@@ -88,31 +96,52 @@ const GenerateRent = () => {
                             </motion.div>
                         )}
                     </div>
+
+                    <div className={`glass-panel p-6 rounded-2xl border-2 transition-all cursor-pointer group ${mode === 'SECURITY' ? 'border-purple-500/50 bg-purple-500/5' : 'border-white/5 hover:border-white/10'}`}
+                        onClick={() => setMode('SECURITY')}>
+                        <div className="flex items-center gap-4">
+                            <div className={`p-3 rounded-xl transition-colors ${mode === 'SECURITY' ? 'bg-purple-500 text-white' : 'bg-white/5 text-white/40'}`}>
+                                <ShieldCheck size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Initialize Security Deposits</h3>
+                                <p className="text-sm text-white/40 group-hover:text-white/60 transition-colors">Attach missing security deposit dues for all active tenants</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Status & Action */}
                 <div className="flex flex-col justify-center space-y-6">
                     <div className="glass-panel p-8 rounded-2xl text-center space-y-6 border border-white/5 shadow-2xl">
                         <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto">
-                            <Calendar size={40} className={mode === 'ALL' ? 'text-green-400' : 'text-blue-400'} />
+                            {mode === 'SECURITY' ? (
+                                <ShieldCheck size={40} className="text-purple-400" />
+                            ) : (
+                                <Calendar size={40} className={mode === 'ALL' ? 'text-green-400' : 'text-blue-400'} />
+                            )}
                         </div>
 
-                        <div className="w-full text-left mb-2">
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2 block">Billing Month (Optional)</label>
-                            <input 
-                                type="month" 
-                                value={billingMonth}
-                                onChange={(e) => setBillingMonth(e.target.value)}
-                                className="glass-input w-full h-12 px-4 rounded-xl text-lg font-bold text-white tracking-widest bg-black/40 focus:border-blue-500 mb-2"
-                            />
-                            <p className="text-[10px] text-white/30 font-medium">Leave empty to use the current month.</p>
-                        </div>
+                        {mode !== 'SECURITY' && (
+                            <div className="w-full text-left mb-2">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2 block">Billing Month (Optional)</label>
+                                <input 
+                                    type="month" 
+                                    value={billingMonth}
+                                    onChange={(e) => setBillingMonth(e.target.value)}
+                                    className="glass-input w-full h-12 px-4 rounded-xl text-lg font-bold text-white tracking-widest bg-black/40 focus:border-blue-500 mb-2"
+                                />
+                                <p className="text-[10px] text-white/30 font-medium">Leave empty to use the current month.</p>
+                            </div>
+                        )}
                         
                         <div className="space-y-2">
                             <h2 className="text-xl font-bold text-white uppercase tracking-tighter">Ready to Generate?</h2>
                             <p className="text-sm text-white/40 px-4">
-                                This will generate a <span className="text-white font-bold">PENDING</span> ledger entry for the current billing period. 
-                                Invoices will automatically reflect in the Tenant Registry and Financial Ledger.
+                                {mode === 'SECURITY' 
+                                    ? "This will generate a PENDING Security Deposit entry for any tenant missing one." 
+                                    : "This will generate a PENDING ledger entry for the chosen billing period."}
+                                {' '}Invoices will automatically reflect in the Tenant Registry and Financial Ledger.
                             </p>
                         </div>
 
@@ -120,7 +149,9 @@ const GenerateRent = () => {
                             onClick={handleGenerate}
                             disabled={loading || (mode === 'ROOM' && !roomNumber)}
                             className={`w-full py-4 rounded-xl font-black text-white uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${
-                                mode === 'ALL' ? 'bg-green-600 hover:bg-green-500 shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/20'
+                                mode === 'ALL' ? 'bg-green-600 hover:bg-green-500 shadow-green-500/20' 
+                                : mode === 'SECURITY' ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-500/20'
+                                : 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/20'
                             }`}
                         >
                             {loading ? <Loader2 className="animate-spin" /> : <Calendar size={20} />}

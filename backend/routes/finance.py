@@ -295,6 +295,30 @@ def generate_bulk_rent():
     db.session.commit()
     return jsonify({"message": f"Successfully generated {generated} rent invoices for {display_month}."}), 200
 
+@finance_bp.route('/finance/generate-security', methods=['POST'])
+def generate_bulk_security():
+    from backend.models import Tenant, Ledger
+    tenants = Tenant.query.filter_by(deleted_at=None).all()
+    count = 0
+    for t in tenants:
+        # Avoid creating deposit if they already have one
+        deposits = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).all()
+        if not deposits:
+            sec_amt = t.billing_profile.security_deposit if t.billing_profile else (t.room.base_rent if t.room else 10000)
+            if sec_amt > 0:
+                l = Ledger(
+                    tenant_id=t.id,
+                    amount=sec_amt,
+                    type='DEPOSIT',
+                    status='PENDING',
+                    description='Initial Security Deposit',
+                    timestamp=t.agreement_start_date or datetime.utcnow()
+                )
+                db.session.add(l)
+                count += 1
+    db.session.commit()
+    return jsonify({"message": f"Successfully generated initial Security Deposits for {count} tenants."}), 200
+
 @finance_bp.route('/finance/manual-charge', methods=['POST'])
 def add_manual_charge():
     """Allows admin to manually inject a PENDING charge/bill into a tenant's ledger (with backdating support)"""
