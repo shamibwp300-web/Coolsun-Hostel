@@ -266,16 +266,16 @@ def generate_bulk_rent():
         if not t.room or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented):
             continue
             
-        # Check if already billed for ANY rent in this month
-        existing = Ledger.query.filter(
+        # 1. Generate Rent for the specified month
+        existing_rent = Ledger.query.filter(
             Ledger.tenant_id == t.id,
             Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
             Ledger.deleted_at == None
         ).all()
         
-        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        already_billed_rent = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing_rent)
         
-        if not already_billed:
+        if not already_billed_rent:
             # Determine rent amount and type
             rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
             rent_type = 'PRIVATE_RENT' if t.tenancy_type == 'Private' else 'RENT'
@@ -292,32 +292,24 @@ def generate_bulk_rent():
             db.session.add(l)
             generated += 1
             
-    db.session.commit()
-    return jsonify({"message": f"Successfully generated {generated} rent invoices for {display_month}."}), 200
-
-@finance_bp.route('/finance/generate-security', methods=['POST'])
-def generate_bulk_security():
-    from backend.models import Tenant, Ledger
-    tenants = Tenant.query.filter_by(deleted_at=None).all()
-    count = 0
-    for t in tenants:
-        # Avoid creating deposit if they already have one
+        # 2. Automatically generate Initial Security Deposit if it's completely missing
         deposits = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).all()
         if not deposits:
             sec_amt = t.billing_profile.security_deposit if t.billing_profile else (t.room.base_rent if t.room else 10000)
             if sec_amt > 0:
-                l = Ledger(
+                sec_l = Ledger(
                     tenant_id=t.id,
                     amount=sec_amt,
                     type='DEPOSIT',
                     status='PENDING',
                     description='Initial Security Deposit',
-                    timestamp=t.agreement_start_date or datetime.utcnow()
+                    timestamp=t.agreement_start_date or timestamp
                 )
-                db.session.add(l)
-                count += 1
+                db.session.add(sec_l)
+                generated += 1
+            
     db.session.commit()
-    return jsonify({"message": f"Successfully generated initial Security Deposits for {count} tenants."}), 200
+    return jsonify({"message": f"Successfully generated {generated} billing items (Rent/Security) for {display_month}."}), 200
 
 @finance_bp.route('/finance/manual-charge', methods=['POST'])
 def add_manual_charge():
