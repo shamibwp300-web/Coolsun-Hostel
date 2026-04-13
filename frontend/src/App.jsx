@@ -21,6 +21,7 @@ import AuditLog from './pages/AuditLog';
 import Maintenance from './pages/dashboard/IssueInbox'; // Reuse or create new page
 import GenerateRent from './pages/finance/GenerateRent';
 import ReceiveRent from './pages/finance/ReceiveRent';
+import CCTV from './pages/CCTV';
 
 function App() {
   // Global Reset: Ensure scrollbar is never locked on mount
@@ -206,6 +207,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Reports />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/cctv"
+            element={
+              <ProtectedRoute module="cctv">
+                <Layout>
+                  <CCTV />
                 </Layout>
               </ProtectedRoute>
             }

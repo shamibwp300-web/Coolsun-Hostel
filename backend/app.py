@@ -104,6 +104,12 @@ def create_app():
                         conn.execute(text(f"ALTER TABLE users ADD COLUMN permissions {col_type}"))
                         conn.commit()
                         app.logger.info(f"✅ AUTO-REPAIR: Added 'permissions' to users")
+                    
+                    # 4. Add CCTV Cameras table if missing
+                    if 'cctv_cameras' not in tables:
+                        # Simple rebuild check for SQLite
+                        db.create_all()
+                        app.logger.info(f"✅ AUTO-REPAIR: Verified cctv_cameras table")
                 except Exception as e:
                     app.logger.warning(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
                     try: conn.rollback()
@@ -209,6 +215,7 @@ def create_app():
     from backend.routes.admin import admin_bp
     from backend.routes.auth import auth_bp
     from backend.routes.users import users_bp
+    from backend.routes.cctv import cctv_bp
 
     app.register_blueprint(onboarding_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api')
@@ -223,6 +230,7 @@ def create_app():
     app.register_blueprint(admin_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(users_bp, url_prefix='/api')
+    app.register_blueprint(cctv_bp, url_prefix='/api')
 
     # ─── Debug / Schema Recovery Endpoint ──────────────────────────────────────
     @app.route('/api/debug/inspect-db')

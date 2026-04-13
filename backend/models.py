@@ -221,3 +221,14 @@ class MoveOutRecord(db.Model, SoftDeleteMixin):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"))
     exit_date = db.Column(db.Date)
+
+class CCTVCamera(db.Model, SoftDeleteMixin):
+    __tablename__ = "cctv_cameras"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    type = db.Column(db.Enum('Stream', 'Embed'), default='Embed') # Stream (HLS/Direct) vs Embed (iFrame)
+    url = db.Column(db.Text, nullable=False) # The .m3u8 link or the <iframe> source
+    description = db.Column(db.String(255))
+    position_index = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
