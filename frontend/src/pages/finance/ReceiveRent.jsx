@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, DollarSign, User, Users, CheckCircle, AlertCircle, Loader2, ArrowRight, CreditCard, Receipt } from 'lucide-react';
+import { Search, Building, ShieldCheck, User, Users, CheckCircle, AlertCircle, Loader2, ArrowRight, CreditCard, Receipt } from 'lucide-react';
 import axios from 'axios';
 
 const ReceiveRent = () => {
@@ -451,18 +451,5 @@ const ReceiveRent = () => {
         </div>
     );
 };
-
-const Building = ({ size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-        <path d="M9 22v-4h6v4"></path>
-        <path d="M8 6h.01"></path>
-        <path d="M16 6h.01"></path>
-        <path d="M8 10h.01"></path>
-        <path d="M16 10h.01"></path>
-        <path d="M8 14h.01"></path>
-        <path d="M16 14h.01"></path>
-    </svg>
-);
 
 export default ReceiveRent;
