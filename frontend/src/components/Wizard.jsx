@@ -114,7 +114,8 @@ const Wizard = () => {
     billingMode: 'pro-rata', // 'full', 'pro-rata', or 'private'
     baseRent: 0, // Store original room rent
     roomTotalRent: 0, // Store full room rent
-    tenancyType: 'Shared' // 'Shared' or 'Private'
+    tenancyType: 'Shared', // 'Shared' or 'Private'
+    isRentResponsible: true // NEW: Toggle for sub-tenant rent
   });
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
@@ -198,12 +199,17 @@ const Wizard = () => {
     const activeBase = formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent;
     const breakdown = calculateRentBreakdown(activeBase, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate);
     
+    // NEW: If tenant is NOT responsible for rent (covered by primary), force to 0
+    const finalRent = formData.isRentResponsible ? breakdown.total : 0;
+    const finalBase = formData.isRentResponsible ? activeBase : 0;
+
     setFormData(prev => ({ 
       ...prev, 
-      rent: breakdown.total,
+      rent: finalRent,
+      baseRent: finalBase,
       tenancyType: formData.billingMode === 'private' ? 'Private' : 'Shared'
     }));
-  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent]);
+  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent, formData.isRentResponsible]);
 
   const canProceedBilling = () => {
     if (currentStep !== 3) return true;
@@ -415,26 +421,38 @@ const Wizard = () => {
               </div>
 
               {formData.parentTenantId && (
-                <div className="animate-in fade-in slide-in-from-top-2 mt-4 space-y-2">
-                  <label className="text-xs font-medium uppercase tracking-wider text-yellow-500 flex items-center">
-                    <AlertCircle size={14} className="mr-1" /> Select Primary Roommate
-                  </label>
-                  <select
-                    value={formData.parentTenantId === 'select' ? '' : formData.parentTenantId}
-                    onChange={(e) => setFormData({ ...formData, parentTenantId: e.target.value })}
-                    className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40 border-yellow-500/30 focus:border-yellow-500/50"
-                  >
-                    <option value="" disabled>-- Choose Primary Holder --</option>
-                    {roomTenants.map(t => (
-                      <option key={t.id} value={t.id}>{t.name} (Bed: {t.bed_label || 'N/A'})</option>
-                    ))}
-                    {roomTenants.length === 0 && (
-                      <option value="" disabled>No existing tenants in this room. You must be Primary.</option>
-                    )}
                   </select>
                 </div>
               )}
             </div>
+
+            {formData.parentTenantId && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block">Rent Responsibility</label>
+                <div
+                  className={`glass-card p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${formData.isRentResponsible ? 'border-blue-500/50 bg-blue-500/10 shadow-lg shadow-blue-500/5' : 'border-white/10 bg-black/20 opacity-60'}`}
+                  onClick={() => setFormData({ ...formData, isRentResponsible: !formData.isRentResponsible })}
+                >
+                  <div className="flex items-center">
+                    <User size={18} className={formData.isRentResponsible ? "text-blue-400 mr-3" : "text-white/30 mr-3"} />
+                    <div>
+                      <div className="text-white font-bold text-sm">
+                        {formData.isRentResponsible ? 'Tenant Pays Rent' : 'Rent Covered by Primary'}
+                      </div>
+                      <div className="text-xs text-white/50 mt-0.5">
+                        {formData.isRentResponsible 
+                          ? 'This tenant will be charged an independent share of room rent.' 
+                          : 'This tenant will have Rs. 0 monthly rent. Data collected for compliance only.'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`w-10 h-6 rounded-full transition-colors flex items-center p-1 ${formData.isRentResponsible ? 'bg-blue-600' : 'bg-white/10'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${formData.isRentResponsible ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </div>
+              </div>
+            )}
+
 
             <div className="space-y-2">
               <label className="text-xs font-medium uppercase tracking-wider text-white/40">Full Name (English / Urdu)</label>
@@ -652,11 +670,20 @@ const Wizard = () => {
                <div className="pt-4 border-t border-white/10 flex justify-between items-end">
                   <div>
                     <div className="text-[10px] text-white/40 uppercase font-black mb-1">Per-Day Rate</div>
-                    <div className="text-xs text-white/60">Rs. {calculateRentBreakdown(formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate).perDay}</div>
+                    <div className="text-xs text-white/60">Rs. {formData.isRentResponsible ? calculateRentBreakdown(formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate).perDay : '0.00'}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] text-green-400 uppercase font-black mb-1">Calculated Rent</div>
-                    <div className="text-2xl font-mono font-black text-green-400">Rs. {Number(formData.rent).toLocaleString()}</div>
+                    {!formData.isRentResponsible ? (
+                      <div className="px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                        <span className="text-[10px] font-black uppercase tracking-tighter text-yellow-500">Billing Covered by Primary</span>
+                        <div className="text-2xl font-mono font-black text-white/20 line-through decoration-white/40">Rs. {Number(formData.rent).toLocaleString()}</div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-[10px] text-green-400 uppercase font-black mb-1">Calculated Rent</div>
+                        <div className="text-2xl font-mono font-black text-green-400">Rs. {Number(formData.rent).toLocaleString()}</div>
+                      </>
+                    )}
                   </div>
                </div>
             </div>

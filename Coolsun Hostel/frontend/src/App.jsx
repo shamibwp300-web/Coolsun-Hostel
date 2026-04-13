@@ -18,7 +18,9 @@ import PoliceVerification from './pages/PoliceVerification';
 import Electricity from './pages/Electricity';
 import Tasks from './pages/Tasks';
 import AuditLog from './pages/AuditLog';
-import Maintenance from './pages/dashboard/IssueInbox'; // Reuse or create new page
+import Maintenance from './pages/dashboard/IssueInbox';
+import GenerateRent from './pages/GenerateRent';
+import ReceiveRent from './pages/ReceiveRent';
 
 function App() {
   // Global Reset: Ensure scrollbar is never locked on mount
@@ -108,6 +110,26 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Finance />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/generate-rent"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <GenerateRent />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/receive-rent"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <ReceiveRent />
                 </Layout>
               </ProtectedRoute>
             }

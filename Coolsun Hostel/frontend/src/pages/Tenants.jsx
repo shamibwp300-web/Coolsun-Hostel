@@ -670,6 +670,20 @@ const Tenants = () => {
                                             onChange={e => setEditingTenant({ ...editingTenant, permanent_address: e.target.value })}
                                             className="glass-input w-full h-12 px-4 rounded-xl" />
                                     </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Agreement Start Date</label>
+                                            <input type="date" value={editingTenant.agreement_start_date || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, agreement_start_date: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Actual Move-in Date</label>
+                                            <input type="date" value={editingTenant.actual_move_in_date || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, actual_move_in_date: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Tenancy & Billing Section */}

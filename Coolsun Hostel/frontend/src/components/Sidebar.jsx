@@ -15,7 +15,10 @@ import {
   UserPlus,
   ListChecks,
   LogIn,
-  Building2
+  Building2,
+  PlusCircle,
+  CreditCard,
+  Coins
 } from 'lucide-react';
 
 const Sidebar = ({ mode = 'desktop' }) => {
@@ -77,6 +80,8 @@ const Sidebar = ({ mode = 'desktop' }) => {
 
         <div>
           <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Financial Edge</p>
+          <NavItem icon={<PlusCircle size={18} />} label="Generate Rent" to="/generate-rent" active={location.pathname === '/generate-rent'} />
+          <NavItem icon={<CreditCard size={18} />} label="Receive Rent" to="/receive-rent" active={location.pathname === '/receive-rent'} />
           <NavItem icon={<Zap size={18} />} label="Utility Billing" to="/electricity" active={location.pathname === '/electricity'} />
           <NavItem icon={<Wallet size={18} />} label="Finance Engine" to="/finance" active={location.pathname === '/finance'} />
         </div>

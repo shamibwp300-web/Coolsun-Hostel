@@ -295,47 +295,56 @@ def generate_bulk_rent():
 
     for t in tenants:
         # CRITICAL: If a room or its floor is bulk rented, skip individual billing
-        # because the whole unit is paid for by the bulk tenant.
         if t.room and (t.room.is_bulk_rented or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented)):
             continue
             
-        # Determine rent amount and type early
+        # Determine rent amount
         rent_amount = 0
-        if t.billing_profile and t.billing_profile.rent_amount:
+        if t.billing_profile and t.billing_profile.rent_amount is not None:
             rent_amount = float(t.billing_profile.rent_amount)
+        elif t.parent_tenant_id:
+            # Sub-tenant defaults to 0 if no profile
+            rent_amount = 0
         elif t.room and t.room.base_rent:
+            # Primary/Standard tenant defaults to room base rent
             rent_amount = float(t.room.base_rent)
         else:
             rent_amount = 10000 # Fallback
             
-        # Check if already billed for ANY rent in this month
-        existing_rent = Ledger.query.filter(
-            Ledger.tenant_id == t.id,
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
-            Ledger.deleted_at == None
-        ).all()
-        
-        already_billed_rent = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing_rent)
-        
-        if not already_billed_rent:
-            rent_type = 'PRIVATE_RENT' if t.tenancy_type == 'Private' else 'RENT'
-            type_label = "Full Room" if rent_type == 'PRIVATE_RENT' else "Shared"
+        # If rent is 0 (e.g. sub-tenant covered by primary), skip rent generation entirely
+        if rent_amount <= 0:
+            # Still check for security deposit if they are new, but skip rent
+            pass
+        else:
+            # Check if already billed for ANY rent in this month
+            existing_rent = Ledger.query.filter(
+                Ledger.tenant_id == t.id,
+                Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
+                Ledger.deleted_at == None
+            ).all()
             
-            l = Ledger(
-                tenant_id=t.id,
-                amount=rent_amount,
-                type=rent_type,
-                status='PENDING',
-                description=f"{type_label} Rent - {display_month}",
-                timestamp=timestamp
-            )
-            db.session.add(l)
-            generated += 1
+            already_billed_rent = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing_rent)
+            
+            if not already_billed_rent:
+                rent_type = 'PRIVATE_RENT' if t.tenancy_type == 'Private' else 'RENT'
+                type_label = "Full Room" if rent_type == 'PRIVATE_RENT' else "Shared"
+                
+                l = Ledger(
+                    tenant_id=t.id,
+                    amount=rent_amount,
+                    type=rent_type,
+                    status='PENDING',
+                    description=f"{type_label} Rent - {display_month}",
+                    timestamp=timestamp
+                )
+                db.session.add(l)
+                generated += 1
             
         # 2. Automatically generate Initial Security Deposit if it's completely missing
+        # Skip for sub-tenants if you want, but usually everyone pays security
         deposits = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).all()
         if not deposits:
-            sec_amt = t.billing_profile.security_deposit if t.billing_profile else (t.room.base_rent if t.room else 10000)
+            sec_amt = t.billing_profile.security_deposit if t.billing_profile else (t.room.base_rent if t.room else 0)
             if sec_amt > 0:
                 sec_l = Ledger(
                     tenant_id=t.id,
@@ -349,7 +358,7 @@ def generate_bulk_rent():
                 generated += 1
             
     db.session.commit()
-    return jsonify({"message": f"Successfully generated {generated} billing items (Rent/Security) for {display_month}."}), 200
+    return jsonify({"message": f"Successfully generated {generated} billing items for {display_month}."}), 200
 
 @finance_bp.route('/finance/manual-charge', methods=['POST'])
 def add_manual_charge():
