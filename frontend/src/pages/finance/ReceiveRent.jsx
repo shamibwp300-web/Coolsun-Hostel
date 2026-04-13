@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Building, ShieldCheck, User, Users, CheckCircle, AlertCircle, Loader2, ArrowRight, CreditCard, Receipt } from 'lucide-react';
+import { Search, Building, Shield, User, Users, CheckCircle, AlertCircle, Loader2, ArrowRight, CreditCard, Receipt } from 'lucide-react';
 import axios from 'axios';
 
 const ReceiveRent = () => {
@@ -219,7 +219,7 @@ const ReceiveRent = () => {
                                     {roomData.bulk_details?.is_bulk && (
                                         <div className="glass-panel p-6 rounded-3xl border border-blue-500/30 bg-blue-500/10 shadow-xl overflow-hidden relative">
                                             <div className="absolute top-0 right-0 p-4 opacity-10">
-                                                <ShieldCheck size={48} className="text-blue-500" />
+                                                <Shield size={48} className="text-blue-500" />
                                             </div>
                                             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-4">Bulk Rental Linked Rooms</h3>
                                             <div className="flex flex-wrap gap-2">
@@ -271,7 +271,7 @@ const ReceiveRent = () => {
                                             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 px-2">Bulk Agreement Holder</h3>
                                             <div className="glass-panel p-6 rounded-3xl border-2 border-blue-500/50 bg-blue-500/20 shadow-2xl relative overflow-hidden group">
                                                 <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                                                    <ShieldCheck size={80} />
+                                                    <Shield size={80} />
                                                 </div>
                                                 <div className="flex justify-between items-center">
                                                     <div className="flex items-center gap-6">
@@ -281,7 +281,7 @@ const ReceiveRent = () => {
                                                         <div>
                                                             <h4 className="text-2xl font-black text-white">{roomData.bulk_details.bulk_tenant_name}</h4>
                                                             <div className="flex items-center gap-4 text-white/40 text-[10px] mt-2 font-bold tracking-widest uppercase">
-                                                                <span className="flex items-center gap-1 text-blue-400"><ShieldCheck size={14} /> Agreement Owner</span>
+                                                                <span className="flex items-center gap-1 text-blue-400"><Shield size={14} /> Agreement Owner</span>
                                                                 <span>• Floor: {roomData.bulk_details.floor_name}</span>
                                                             </div>
                                                         </div>

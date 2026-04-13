@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Building, Search, CheckCircle, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { Calendar, Building, Search, CheckCircle, AlertCircle, Loader2, Shield } from 'lucide-react';
 import axios from 'axios';
 
 const GenerateRent = () => {
@@ -12,7 +12,7 @@ const GenerateRent = () => {
     const [bulkDetected, setBulkDetected] = useState(null);
 
     // Debounced check for bulk room
-    React.useEffect(() => {
+    useEffect(() => {
         if (mode === 'ROOM' && roomNumber.length >= 3) {
             const timer = setTimeout(async () => {
                 try {
@@ -114,7 +114,7 @@ const GenerateRent = () => {
                                 />
                                 {bulkDetected && (
                                     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center gap-3">
-                                        <ShieldCheck size={16} className="text-blue-400 shrink-0" />
+                                        <Shield size={16} className="text-blue-400 shrink-0" />
                                         <p className="text-[10px] font-bold text-blue-400 leading-tight">
                                             BULK AGREEMENT DETECTED: This room is part of {bulkDetected.floor_name} group ({bulkDetected.linked_rooms.join(', ')}).
                                         </p>
