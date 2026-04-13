@@ -18,13 +18,36 @@ import {
 import axios from 'axios';
 
 const ReceiveRent = () => {
+  const [viewMode, setViewMode] = useState('single'); // 'single' or 'hostel'
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [roomData, setRoomData] = useState(null);
+  const [hostelData, setHostelData] = useState([]);
   const [error, setError] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paying, setPaying] = useState(false);
   const [success, setSuccess] = useState(null);
+  const [repairing, setRepairing] = useState(false);
+
+  // Fetch Hostel Summary for "Whole Hostel" view
+  const fetchHostelSummary = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get('/api/finance/hostel-summary');
+      setHostelData(res.data);
+    } catch (err) {
+      setError("Failed to fetch hostel summary.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'hostel') {
+      fetchHostelSummary();
+    }
+  }, [viewMode]);
 
   // Fetch Room Summary
   const fetchRoomRecord = async (num = searchQuery) => {
@@ -37,10 +60,26 @@ const ReceiveRent = () => {
     try {
       const res = await axios.get(`/api/finance/room-summary/${num}`);
       setRoomData(res.data);
+      if (viewMode === 'hostel') setViewMode('single');
     } catch (err) {
       setError(err.response?.data?.error || "Room record not found.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDataRepair = async () => {
+    if (!window.confirm("This will zero out balances for ALL sub-tenants who are covered by a Primary tenant. Proceed?")) return;
+    setRepairing(true);
+    try {
+      const res = await axios.post('/api/finance/data-repair');
+      setSuccess(`Repair successful: ${res.data.entries_voided} charges voided.`);
+      if (roomData) fetchRoomRecord(roomData.room_number);
+      if (viewMode === 'hostel') fetchHostelSummary();
+    } catch (err) {
+      setError("Data repair failed.");
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -103,19 +142,84 @@ const ReceiveRent = () => {
     </div>
   );
 
+  const HostelSummaryView = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {hostelData.map((room) => (
+        <motion.div 
+          key={room.room_id}
+          whileHover={{ scale: 1.02 }}
+          onClick={() => fetchRoomRecord(room.room_number)}
+          className="glass-card p-6 border-white/10 hover:border-blue-500/30 cursor-pointer transition-all group relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+            <Home size={80} />
+          </div>
+          
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="text-2xl font-black text-white">#{room.room_number}</h3>
+              <p className="text-[10px] text-white/40 uppercase font-black tracking-widest mt-1">Room Total</p>
+            </div>
+            <div className={`px-2 py-1 rounded text-[10px] font-black uppercase ${room.total_pending > 0 ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+              {room.total_pending > 0 ? 'DUE' : 'CLEAR'}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-xs text-white/60 font-bold">{room.primary_name}</p>
+                <p className="text-[10px] text-white/30 uppercase tracking-tighter">{room.occupancy} Residents</p>
+              </div>
+              <p className={`text-xl font-mono font-black ${room.total_pending > 0 ? 'text-red-400' : 'text-white/40'}`}>
+                 Rs. {room.total_pending.toLocaleString()}
+              </p>
+            </div>
+            
+            <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+               <span className="text-[9px] font-bold text-white/20 tracking-widest uppercase italic">Click to manage</span>
+               <ArrowRight size={14} className="text-white/20 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+            </div>
+          </div>
+        </motion.div>
+      ))}
+      {hostelData.length === 0 && !loading && (
+        <div className="col-span-full py-20 text-center text-white/20">
+          No occupied rooms found.
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 p-6">
       {/* Header */}
-      <div className="space-y-1">
-        <h1 className="text-4xl font-black text-white tracking-tighter">Receive Rent</h1>
-        <p className="text-white/40 font-medium italic">Collect and record payments for rooms and tenants</p>
+      <div className="flex justify-between items-end">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-black text-white tracking-tighter">Receive Rent</h1>
+          <p className="text-white/40 font-medium italic">Collect and record payments for rooms and tenants</p>
+        </div>
+        <button 
+          onClick={handleDataRepair}
+          disabled={repairing}
+          className="text-[10px] font-black text-white/20 hover:text-yellow-500/50 uppercase tracking-[0.2em] transition-colors flex items-center"
+        >
+          {repairing ? <Loader2 size={12} className="animate-spin mr-2" /> : <AlertCircle size={12} className="mr-2" />}
+          Emergency Data Repair
+        </button>
       </div>
 
       {/* Mode Selector & Search */}
       <div className="flex flex-col md:flex-row gap-4 items-center">
         <div className="glass-card p-1 flex space-x-1 shrink-0">
-           <button className="px-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-lg">SINGLE ROOM</button>
-           <button className="px-6 py-3 rounded-xl text-white/40 font-bold text-sm hover:text-white transition-colors">WHOLE HOSTEL</button>
+           <button 
+             onClick={() => setViewMode('single')}
+             className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${viewMode === 'single' ? 'bg-blue-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+           >SINGLE ROOM</button>
+           <button 
+             onClick={() => setViewMode('hostel')}
+             className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${viewMode === 'hostel' ? 'bg-blue-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+           >WHOLE HOSTEL</button>
         </div>
         
         <div className="flex-1 w-full relative">
@@ -141,7 +245,9 @@ const ReceiveRent = () => {
       </div>
 
       <AnimatePresence mode="wait">
-        {roomData ? (
+        {viewMode === 'hostel' ? (
+          <HostelSummaryView key="hostel" />
+        ) : roomData ? (
           <motion.div 
             key="result"
             initial={{ opacity: 0, y: 20 }}

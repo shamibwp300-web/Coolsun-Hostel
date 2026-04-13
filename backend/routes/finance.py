@@ -524,3 +524,76 @@ def get_room_summary(room_number):
         "bulk_details": bulk_details,
         "total_pending": sum(t['balance'] for t in res_primary) + sum(t['balance'] for t in res_sub)
     }), 200
+
+@finance_bp.route('/finance/hostel-summary', methods=['GET'])
+def get_hostel_summary():
+    from backend.models import Room, Tenant
+    rooms = Room.query.filter_by(deleted_at=None).order_by(Room.number.asc()).all()
+    
+    res = []
+    for r in rooms:
+        active_tenants = r.get_active_tenants()
+        if not active_tenants:
+            continue
+            
+        primary = [t for t in active_tenants if t.parent_tenant_id is None]
+        
+        # Calculate room total
+        total_pending = 0
+        tenant_ids = [t.id for t in active_tenants]
+        if tenant_ids:
+            pending_ledgers = Ledger.query.filter(
+                Ledger.tenant_id.in_(tenant_ids), 
+                Ledger.status == 'PENDING', 
+                Ledger.deleted_at == None
+            ).all()
+            total_pending = sum(float(l.amount) for l in pending_ledgers)
+            
+        res.append({
+            "room_id": r.id,
+            "room_number": r.number,
+            "primary_name": primary[0].name if primary else "No Primary",
+            "occupancy": len(active_tenants),
+            "total_pending": total_pending,
+            "is_bulk": r.is_bulk_rented
+        })
+        
+    return jsonify(res), 200
+
+@finance_bp.route('/finance/data-repair', methods=['POST'])
+def repair_financial_data():
+    """One-time cleanup script to zero out incorrect sub-tenant balances"""
+    from backend.models import Tenant, BillingProfile
+    
+    # 1. Find all sub-tenants
+    sub_tenants = Tenant.query.filter(Tenant.parent_tenant_id != None, Tenant.deleted_at == None).all()
+    
+    fixed_count = 0
+    voided_count = 0
+    
+    for t in sub_tenants:
+        # Zero out rent in billing profile if it exists
+        if t.billing_profile and t.billing_profile.rent_amount > 0:
+            t.billing_profile.rent_amount = 0
+            fixed_count += 1
+            
+        # Void pending rent charges in ledger
+        pending_rent = Ledger.query.filter(
+            Ledger.tenant_id == t.id,
+            Ledger.status == 'PENDING',
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'RENT_DUES']),
+            Ledger.deleted_at == None
+        ).all()
+        
+        for entry in pending_rent:
+            entry.status = 'VOIDED'
+            entry.description = (entry.description or "") + " (Auto-Voided: Sub-tenant covered by Primary)"
+            voided_count += 1
+            
+    db.session.commit()
+    
+    return jsonify({
+        "message": "Financial data repair completed successfully.",
+        "profiles_reset": fixed_count,
+        "entries_voided": voided_count
+    }), 200

@@ -1,54 +1,65 @@
-from backend.app import create_app
-from backend.models import db, Tenant, BillingProfile, Ledger, Room
+import sqlite3
+import os
 
-app = create_app()
+def find_best_db():
+    potential_paths = [
+        "backend/instance/hostel.db",
+        "instance/hostel.db",
+        "hostel.db",
+        "../hostel.db",
+        "backend/hostel_erp.db"
+    ]
+    for p in potential_paths:
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            return p
+    return None
 
-def fix_room_billing(room_number):
-    with app.app_context():
-        print(f"--- Fixing Billing for Room {room_number} ---")
-        room = Room.query.filter_by(number=room_number).first()
-        if not room:
-            print("Room not found.")
+def cleanup():
+    db_path = find_best_db()
+    if not db_path:
+        print("Could not find database!")
+        return
+
+    print(f"Connecting to {db_path}...")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    try:
+        # 1. Identify Sub-tenants
+        cursor.execute("SELECT id, name FROM tenants WHERE parent_tenant_id IS NOT NULL")
+        sub_tenants = cursor.fetchall()
+        
+        if not sub_tenants:
+            print("No sub-tenants found to clean up.")
             return
 
-        # Find active tenants in this room
-        tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
-        
-        primary_tenants = [t for t in tenants if t.parent_tenant_id is None]
-        sub_tenants = [t for t in tenants if t.parent_tenant_id is not None]
+        print(f"Found {len(sub_tenants)} sub-tenants. Starting cleanup...")
 
-        print(f"Found {len(primary_tenants)} primary and {len(sub_tenants)} sub-tenants.")
+        for t_id, t_name in sub_tenants:
+            # 2. Zero out rent in billing_profiles
+            cursor.execute("UPDATE billing_profiles SET rent_amount = 0 WHERE tenant_id = ?", (t_id,))
+            print(f" - Zeroed rent for {t_name} (ID: {t_id})")
 
-        if len(primary_tenants) == 1 and len(sub_tenants) > 0:
-            print(f"Applying 'Primary Pays All' fix for Room {room_number}...")
+            # 3. Void pending rent charges in ledger
+            # We look for PENDING entries of type RENT or PRIVATE_RENT
+            cursor.execute("""
+                UPDATE ledger 
+                SET status = 'VOIDED', description = description || ' (Auto-Voided: Sub-tenant covered by Primary)'
+                WHERE tenant_id = ? AND status = 'PENDING' AND type IN ('RENT', 'PRIVATE_RENT')
+            """, (t_id,))
             
-            for sub in sub_tenants:
-                print(f"Fixing sub-tenant: {sub.name}")
-                
-                # 1. Update Billing Profile to 0
-                bp = BillingProfile.query.filter_by(tenant_id=sub.id).first()
-                if bp:
-                    old_rent = bp.rent_amount
-                    bp.rent_amount = 0.0
-                    bp.pro_rata_rent = 0.0
-                    print(f"  - Reset monthly rent from {old_rent} to 0.0")
-                
-                # 2. Fix Ledger Entries (Cancel pending rents)
-                pendings = Ledger.query.filter_by(
-                    tenant_id=sub.id, 
-                    type='RENT', 
-                    status='PENDING'
-                ).all()
-                
-                for entry in pendings:
-                    entry.amount = 0.0
-                    entry.description += " (Auto-fixed: Multiplied Rent Correction)"
-                    print(f"  - Zeroed out pending ledger entry: {entry.id}")
+            rows_affected = cursor.rowcount
+            if rows_affected > 0:
+                print(f"   * Voided {rows_affected} pending rent charge(s) for {t_name}")
 
-            db.session.commit()
-            print("✅ Room billing fixed successfully.")
-        else:
-            print("Criteria not met (need exactly 1 primary and at least 1 sub-tenant).")
+        conn.commit()
+        print("\nCleanup Complete! Database changes committed.")
+
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
-    fix_room_billing("201")
+    cleanup()

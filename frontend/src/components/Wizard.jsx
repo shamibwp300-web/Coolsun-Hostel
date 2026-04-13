@@ -177,15 +177,21 @@ const Wizard = () => {
 
   useEffect(() => {
     // Determine which base rent to use: Full Room or Per-Bed
-    const activeBase = formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent;
+    let activeBase = formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent;
+    
+    // NEW: If it's a sub-tenant, default base rent to 0 unless manually overridden
+    if (formData.parentTenantId && formData.parentTenantId !== '') {
+      activeBase = 0;
+    }
+
     const breakdown = calculateRentBreakdown(activeBase, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate);
     
     setFormData(prev => ({ 
       ...prev, 
       rent: breakdown.total,
-      tenancyType: formData.billingMode === 'private' ? 'Private' : 'Shared'
+      tenancy_type: formData.billingMode === 'private' ? 'Private' : 'Shared'
     }));
-  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent]);
+  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent, formData.parentTenantId]);
 
   const canProceedBilling = () => {
     if (currentStep !== 3) return true;
@@ -640,8 +646,13 @@ const Wizard = () => {
                     <div className="text-xs text-white/60">Rs. {calculateRentBreakdown(formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate).perDay}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] text-green-400 uppercase font-black mb-1">Calculated Rent</div>
+                    <div className="text-[10px] text-green-400 uppercase font-black mb-1">
+                      {formData.parentTenantId ? 'Specific Rent (Optional)' : 'Calculated Rent'}
+                    </div>
                     <div className="text-2xl font-mono font-black text-green-400">Rs. {Number(formData.rent).toLocaleString()}</div>
+                    {formData.parentTenantId && (
+                      <p className="text-[9px] text-white/30 italic">Sub-tenants usually pay 0 (covered by Primary)</p>
+                    )}
                   </div>
                </div>
             </div>
