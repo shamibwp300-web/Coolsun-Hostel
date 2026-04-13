@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt, RotateCcw, Archive, Flame } from 'lucide-react';
+import { Search, MoreVertical, MessageCircle, Edit, Trash2, UserPlus, Filter, X, Save, Wifi, Users, LogOut, AlertTriangle, CheckCircle, FileText, CreditCard, Receipt, RotateCcw, Archive } from 'lucide-react';
 import axios from 'axios';
 import DocumentViewerModal from '../components/DocumentViewerModal';
 
@@ -8,6 +8,10 @@ const Tenants = () => {
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [sortField, setSortField] = useState('name');
+    const [sortDir, setSortDir] = useState('asc');
+    const [statusFilter, setStatusFilter] = useState('All'); // All, Active, Late, Inactive
+    const [showSortMenu, setShowSortMenu] = useState(false);
     const [editingTenant, setEditingTenant] = useState(null);
     const [roomTenants, setRoomTenants] = useState([]);
     const [moveOutTenant, setMoveOutTenant] = useState(null);
@@ -22,22 +26,9 @@ const Tenants = () => {
     });
     const [moveOutLoading, setMoveOutLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
-    const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState(null); // { id, name }
     const [showArchived, setShowArchived] = useState(false);
     const [archivedCount, setArchivedCount] = useState(0);
-    const [archiveLoading, setArchiveLoading] = useState(false);
-    const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
     
-    // Add Manual Charge State
-    const [chargeModalTenant, setChargeModalTenant] = useState(null);
-    const [chargeForm, setChargeForm] = useState({
-        type: 'RENT',
-        amount: '',
-        date: new Date().toISOString().split('T')[0],
-        description: ''
-    });
-    const [chargeLoading, setChargeLoading] = useState(false);
-
     // Document Viewer State
     const [viewer, setViewer] = useState({ isOpen: false, url: '', title: '' });
 
@@ -101,37 +92,13 @@ const Tenants = () => {
         }
     };
 
-    const handleAddCharge = async (e) => {
-        e.preventDefault();
-        if (!chargeForm.amount || parseFloat(chargeForm.amount) <= 0) {
-            alert("A valid amount is required");
-            return;
-        }
-
-        setChargeLoading(true);
-        try {
-            const payload = {
-                tenant_id: chargeModalTenant.id,
-                ...chargeForm
-            };
-            await axios.post('/api/finance/manual-charge', payload);
-            alert(`✅ Charge added successfully!`);
-            setChargeModalTenant(null);
-            fetchTenants(); // Re-fetch immediately to update live balance
-        } catch (err) {
-            alert(err.response?.data?.error || "Failed to add charge");
-        } finally {
-            setChargeLoading(false);
-        }
-    };
-
     const handleUpdate = async (e) => {
         e.preventDefault();
         try {
             const formData = new FormData();
             // Append all existing fields
             Object.keys(editingTenant).forEach(key => {
-                if (key !== 'transactions' && key !== 'compliance' && editingTenant[key] !== null && editingTenant[key] !== undefined) {
+                if (key !== 'transactions' && key !== 'compliance' && key !== 'compliance_history') {
                     formData.append(key, editingTenant[key]);
                 }
             });
@@ -154,7 +121,6 @@ const Tenants = () => {
 
     const handleDelete = async () => {
         if (!deleteConfirm) return;
-        setArchiveLoading(true);
         const { id, name } = deleteConfirm;
         try {
             console.log(`Confirming delete for ${name} (ID: ${id})`);
@@ -165,23 +131,7 @@ const Tenants = () => {
             fetchTenants();
         } catch (err) {
             console.error("Archive failed:", err);
-            const serverError = err.response?.data?.error;
-            const status = err.response?.status;
-            
-            if (serverError) {
-                alert(`❌ Archive Failed: ${serverError}`);
-                // If it's already archived, refresh to sync view
-                if (serverError.toLowerCase().includes("already archived")) {
-                    setDeleteConfirm(null);
-                    fetchTenants();
-                }
-            } else if (status === 500) {
-                alert(`❌ Server Crash (500): The database might be locked. Please try again in a few seconds.`);
-            } else {
-                alert(`❌ Failed to archive ${name}. ${err.message}`);
-            }
-        } finally {
-            setArchiveLoading(false);
+            alert(err.response?.data?.error || `Failed to archive ${name}`);
         }
     };
 
@@ -193,23 +143,6 @@ const Tenants = () => {
             fetchTenants();
         } catch (err) {
             alert(err.response?.data?.error || "Restore failed");
-        }
-    };
-
-    const handlePermanentDelete = async () => {
-        if (!permanentDeleteConfirm) return;
-        setPermanentDeleteLoading(true);
-        const { id, name } = permanentDeleteConfirm;
-        try {
-            await axios.delete(`/api/tenants/${id}/permanent`);
-            setPermanentDeleteConfirm(null);
-            alert(`🗑️ ${name} has been permanently deleted.`);
-            fetchTenants();
-        } catch (err) {
-            const serverError = err.response?.data?.error;
-            alert(`❌ ${serverError || 'Permanent delete failed. Please try again.'}`);
-        } finally {
-            setPermanentDeleteLoading(false);
         }
     };
 
@@ -232,15 +165,53 @@ const Tenants = () => {
         e.target.value = null; // Reset input
     };
 
-    const filteredTenants = tenants.filter(t => {
-        const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.phone?.includes(searchTerm);
-        
-        const matchesView = showArchived ? t.is_archived : !t.is_archived;
-        
-        return matchesSearch && matchesView;
-    });
+    const handleSort = (field) => {
+        if (sortField === field) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDir('asc');
+        }
+        setShowSortMenu(false);
+    };
+
+    const SortArrow = ({ field }) => {
+        if (sortField !== field) return <span className="inline-block ml-1 text-white/20 text-[10px]">↕</span>;
+        return <span className="inline-block ml-1 text-blue-400 text-[10px]">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+    };
+
+    const filteredTenants = tenants
+        .filter(t => {
+            const matchesSearch = t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                t.room?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                t.phone?.includes(searchTerm);
+            
+            const matchesView = showArchived ? t.is_archived : !t.is_archived;
+            
+            if (!matchesSearch || !matchesView) return false;
+
+            // Status filter
+            if (statusFilter === 'All') return true;
+            if (statusFilter === 'Active') return t.status === 'Active';
+            if (statusFilter === 'Late') return t.status === 'Late' || t.status === 'Inactive';
+            return true;
+        })
+        .sort((a, b) => {
+            let valA = '', valB = '';
+            if (sortField === 'name') {
+                valA = (a.name || '').toLowerCase();
+                valB = (b.name || '').toLowerCase();
+            } else if (sortField === 'room') {
+                valA = String(a.room || '').toLowerCase();
+                valB = String(b.room || '').toLowerCase();
+            } else if (sortField === 'phone') {
+                valA = (a.phone || '');
+                valB = (b.phone || '');
+            }
+            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
 
     // Compute live refund estimate
     const liveRefund = settlementPreview
@@ -314,19 +285,129 @@ const Tenants = () => {
                     </button>
                 </div>
 
-                <button className="p-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all border border-white/10">
-                    <Filter size={20} />
-                </button>
+                {/* Active sort badge */}
+                {(sortField !== 'name' || sortDir !== 'asc' || statusFilter !== 'All') && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold whitespace-nowrap">
+                        <span className="uppercase tracking-wider">
+                            {statusFilter !== 'All' ? `${statusFilter} • ` : ''}
+                            {sortField === 'name' ? 'Name' : sortField === 'room' ? 'Room No.' : 'Phone'}
+                        </span>
+                        <span>{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        <button
+                            onClick={() => { setSortField('name'); setSortDir('asc'); setStatusFilter('All'); }}
+                            className="ml-1 text-blue-400/60 hover:text-blue-300 transition-colors"
+                            title="Reset filters"
+                        >
+                            <X size={12} />
+                        </button>
+                    </div>
+                )}
+
+                {/* Sort dropdown */}
+                <div className="relative">
+                    <button
+                        onClick={() => setShowSortMenu(v => !v)}
+                        className={`p-3 rounded-lg transition-all border flex items-center gap-2 ${
+                            showSortMenu
+                                ? 'bg-blue-600/20 border-blue-500/50 text-blue-400'
+                                : 'bg-white/5 hover:bg-white/10 text-white/50 hover:text-white border-white/10'
+                        }`}
+                        title="Sort options"
+                    >
+                        <Filter size={20} />
+                    </button>
+
+                    <AnimatePresence>
+                        {showSortMenu && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute right-0 top-full mt-2 w-52 bg-[#0f1117] border border-white/10 rounded-xl shadow-2xl shadow-black/60 z-50 overflow-hidden"
+                            >
+                                <div className="px-4 py-2.5 border-b border-white/5">
+                                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Registration Status</p>
+                                </div>
+                                <div className="p-2 space-y-1">
+                                    {['All', 'Active', 'Late'].map(st => (
+                                        <button
+                                            key={st}
+                                            onClick={() => setStatusFilter(st)}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                                                statusFilter === st ? 'bg-blue-600 text-white font-bold' : 'text-white/40 hover:bg-white/5'
+                                            }`}
+                                        >
+                                            {st} Tenants
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="px-4 py-2.5 border-y border-white/5">
+                                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Sort By</p>
+                                </div>
+                                <div className="p-1">
+                                    {[
+                                        { field: 'name',  label: 'Tenant Name',  icon: '🔤' },
+                                        { field: 'room',  label: 'Room Number',  icon: '🚪' },
+                                        { field: 'phone', label: 'Phone Number', icon: '📞' },
+                                    ].map(({ field, label, icon }) => (
+                                        <button
+                                            key={field}
+                                            onClick={() => handleSort(field)}
+                                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-white/5 ${
+                                                sortField === field ? 'text-blue-400 bg-blue-500/10' : 'text-white/70'
+                                            }`}
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>{icon}</span>
+                                                <span>{label}</span>
+                                            </span>
+                                            {sortField === field && (
+                                                <span className="text-xs font-bold bg-blue-500/20 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-tighter">
+                                                    {sortDir === 'asc' ? '↑' : '↓'}
+                                                </span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="px-4 py-2.5 border-t border-white/5 flex gap-2">
+                                    <button
+                                        onClick={() => { setSortField('name'); setSortDir('asc'); setStatusFilter('All'); setShowSortMenu(false); }}
+                                        className="flex-1 text-[11px] py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 transition-colors font-bold uppercase tracking-widest"
+                                     >
+                                        Reset
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
             {/* Registry Table */}
-            <div className="glass-panel overflow-x-auto rounded-xl pb-32">
+            <div className="glass-panel overflow-x-auto rounded-xl pb-24">
                 <table className="w-full text-left">
                     <thead className="bg-white/5 text-xs uppercase text-white/40 font-semibold tracking-wider">
                         <tr>
-                            <th className="p-6">Tenant Name</th>
-                            <th className="p-6">Room / Bed</th>
-                            <th className="p-6">Phone</th>
+                            <th
+                                className="p-6 cursor-pointer hover:text-white/80 transition-colors select-none"
+                                onClick={() => handleSort('name')}
+                            >
+                                Tenant Name <SortArrow field="name" />
+                            </th>
+                            <th
+                                className="p-6 cursor-pointer hover:text-white/80 transition-colors select-none"
+                                onClick={() => handleSort('room')}
+                            >
+                                Room / Bed <SortArrow field="room" />
+                            </th>
+                            <th
+                                className="p-6 cursor-pointer hover:text-white/80 transition-colors select-none"
+                                onClick={() => handleSort('phone')}
+                            >
+                                Phone <SortArrow field="phone" />
+                            </th>
                             <th className="p-6">Compliance</th>
                             <th className="p-6">Documents</th>
                             <th className="p-6">Status</th>
@@ -337,7 +418,7 @@ const Tenants = () => {
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {filteredTenants.map((tenant) => (
-                            <tr key={tenant.id} className={`hover:bg-white/5 transition-colors group ${tenant.is_archived ? 'opacity-60 bg-black/10' : ''}`}>
+                            <tr key={tenant.id} className="hover:bg-white/5 transition-colors group">
                                 <td className="p-6 font-medium text-white">
                                     {tenant.name}
                                     {tenant.is_archived && <span className="ml-2 text-[8px] bg-white/10 px-1 py-0.5 rounded text-white/40 uppercase tracking-tighter">Archived</span>}
@@ -418,16 +499,18 @@ const Tenants = () => {
                                             )}
                                         </div>
 
-                                        {(tenant.rent_balance > 0 || tenant.security_balance > 0 || tenant.utility_balance > 0) && (
-                                            <div className="flex flex-col items-end mt-1 space-y-0.5">
-                                                {tenant.rent_balance > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded font-black tracking-widest uppercase">Rent: {tenant.rent_balance}</span>}
-                                                {tenant.security_balance > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded font-black tracking-widest uppercase">Sec: {tenant.security_balance}</span>}
-                                                {tenant.utility_balance > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded font-black tracking-widest uppercase">Util: {tenant.utility_balance}</span>}
+                                        {(tenant.rent_balance > 0 || tenant.security_balance > 0 || tenant.utility_balance > 0 || tenant.fine_balance > 0 || tenant.opening_balance > 0) && (
+                                            <div className="flex space-x-1 mt-1">
+                                                {tenant.rent_balance > 0 && <span className="text-[9px] px-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded" title="Rent">R</span>}
+                                                {tenant.security_balance > 0 && <span className="text-[9px] px-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded" title="Security">S</span>}
+                                                {tenant.utility_balance > 0 && <span className="text-[9px] px-1 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded" title="Utility">U</span>}
+                                                {tenant.fine_balance > 0 && <span className="text-[9px] px-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded" title="Fine">F</span>}
+                                                {tenant.opening_balance > 0 && <span className="text-[9px] px-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded" title="Opening Balance">O</span>}
                                             </div>
                                         )}
 
                                         {/* Hover Tooltip Breakdown */}
-                                        <div className="absolute right-0 top-full mt-1 w-48 p-3 bg-black/95 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl backdrop-blur-xl">
+                                        <div className="absolute right-0 bottom-full mb-2 w-48 p-3 bg-black/95 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl backdrop-blur-xl">
                                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2 border-b border-white/5 pb-1">Ledger Summary</h4>
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between text-xs">
@@ -453,6 +536,18 @@ const Tenants = () => {
                                                         <span className="text-white font-medium">Rs. {tenant.utility_balance.toLocaleString()}</span>
                                                     </div>
                                                 )}
+                                                {tenant.fine_balance > 0 && (
+                                                    <div className="flex justify-between text-[11px]">
+                                                        <span className="text-red-400">Fines Due:</span>
+                                                        <span className="text-white font-medium">Rs. {tenant.fine_balance.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {tenant.opening_balance > 0 && (
+                                                    <div className="flex justify-between text-[11px]">
+                                                        <span className="text-orange-400">Opening Bal Due:</span>
+                                                        <span className="text-white font-medium">Rs. {tenant.opening_balance.toLocaleString()}</span>
+                                                    </div>
+                                                )}
                                                 <div className="pt-1.5 border-t border-white/5 mt-1 flex justify-between text-xs font-bold">
                                                     <span className="text-white">Total Pending:</span>
                                                     <span className="text-red-400 underline decoration-red-400/30">Rs. {tenant.balance.toLocaleString()}</span>
@@ -466,21 +561,6 @@ const Tenants = () => {
                                         <a href={`https://wa.me/${tenant.phone?.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" title="WhatsApp" className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors">
                                             <MessageCircle size={18} />
                                         </a>
-                                        <button
-                                            title="Add Manual Charge/Bill"
-                                            onClick={() => {
-                                                setChargeModalTenant(tenant);
-                                                setChargeForm({
-                                                    type: 'RENT',
-                                                    amount: '',
-                                                    date: new Date().toISOString().split('T')[0],
-                                                    description: ''
-                                                });
-                                            }}
-                                            className="p-2 rounded-lg hover:bg-purple-500/20 text-purple-400 transition-colors"
-                                        >
-                                            <Receipt size={18} />
-                                        </button>
                                         <button
                                             title="Edit"
                                             onClick={() => {
@@ -499,32 +579,21 @@ const Tenants = () => {
                                         >
                                             <LogOut size={18} />
                                         </button>
-                                        {!tenant.is_archived && (
-                                            <button
-                                                title="Archive"
-                                                onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
-                                                className="p-2 rounded-lg hover:bg-red-500/20 text-red-500/60 hover:text-red-500 transition-colors"
-                                            >
-                                                <Archive size={18} />
-                                            </button>
-                                        )}
+                                        <button
+                                            title="Archive"
+                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
+                                            className="p-2 rounded-lg hover:bg-red-500/20 text-red-500/60 hover:text-red-500 transition-colors"
+                                        >
+                                            <Archive size={18} />
+                                        </button>
                                         {tenant.is_archived && (
-                                            <>
-                                                <button
-                                                    title="Restore to Active"
-                                                    onClick={() => handleRestore(tenant)}
-                                                    className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors"
-                                                >
-                                                    <RotateCcw size={18} />
-                                                </button>
-                                                <button
-                                                    title="Delete Permanently"
-                                                    onClick={(e) => { e.stopPropagation(); setPermanentDeleteConfirm({ id: tenant.id, name: tenant.name }); }}
-                                                    className="p-2 rounded-lg hover:bg-red-600/30 text-red-400/60 hover:text-red-400 transition-colors"
-                                                >
-                                                    <Flame size={18} />
-                                                </button>
-                                            </>
+                                            <button
+                                                title="Restore"
+                                                onClick={() => handleRestore(tenant)}
+                                                className="p-2 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors"
+                                            >
+                                                <RotateCcw size={18} />
+                                            </button>
                                         )}
                                     </div>
                                 </td>
@@ -601,31 +670,25 @@ const Tenants = () => {
                                             onChange={e => setEditingTenant({ ...editingTenant, permanent_address: e.target.value })}
                                             className="glass-input w-full h-12 px-4 rounded-xl" />
                                     </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Agreement Start Date</label>
+                                            <input type="date" value={editingTenant.agreement_start_date || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, agreement_start_date: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Actual Move-in Date</label>
+                                            <input type="date" value={editingTenant.actual_move_in_date || ''}
+                                                onChange={e => setEditingTenant({ ...editingTenant, actual_move_in_date: e.target.value })}
+                                                className="glass-input w-full h-12 px-4 rounded-xl" />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Tenancy & Billing Section */}
                                 <div className="space-y-4 pt-4 mt-4">
                                     <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Tenancy & Billing Details</h4>
-                                    
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Applied Billing System</label>
-                                            <select value={editingTenant.tenancy_type || 'Shared'}
-                                                onChange={(e) => setEditingTenant({ ...editingTenant, tenancy_type: e.target.value })}
-                                                className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer select-none">
-                                                <option value="Shared">Pro-Rata Rent (Shared Mode)</option>
-                                                <option value="Shared Full">Full Month Rent (Shared Mode)</option>
-                                                <option value="Private">Full Room Rent (Private Mode)</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Rent Start Date (Billing Start)</label>
-                                            <input type="date" value={editingTenant.rent_start_date || ''}
-                                                onChange={e => setEditingTenant({ ...editingTenant, rent_start_date: e.target.value })}
-                                                className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40 cursor-pointer" />
-                                        </div>
-                                    </div>
-
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Monthly Rent (Rs.)</label>
@@ -680,45 +743,45 @@ const Tenants = () => {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="space-y-4 pt-4 mt-4">
-                                    <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Documents & Verification</h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {[
-                                            { id: 'id_front', label: 'ID Front', icon: CreditCard, color: 'text-blue-400' },
-                                            { id: 'id_back', label: 'ID Back', icon: CreditCard, color: 'text-indigo-400' },
-                                            { id: 'police_form', label: 'Police Form', icon: FileText, color: 'text-purple-400' },
-                                            { id: 'agreement', label: 'Agreement Form', icon: FileText, color: 'text-green-400' }
-                                        ].map(doc => (
-                                            <div key={doc.id} className="space-y-2">
-                                                <label className="text-[10px] text-white/40 uppercase tracking-widest block font-bold">{doc.label}</label>
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`p-2 rounded-lg bg-white/5 border border-white/10 ${doc.color} flex items-center gap-2 flex-grow min-w-0`}>
-                                                        <doc.icon size={14} />
-                                                        <span className="text-[10px] truncate max-w-[100px]">
-                                                            {editingTenant.new_files?.[doc.id]?.name || (editingTenant[`${doc.id}_url`] ? 'Uploaded' : 'No File')}
-                                                        </span>
+                                    <div className="space-y-4 pt-4 mt-4">
+                                        <h4 className="text-xs text-blue-400 uppercase tracking-widest font-bold border-b border-blue-500/20 pb-2">Documents & Verification</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {[
+                                                { id: 'id_front', label: 'ID Front', icon: CreditCard, color: 'text-blue-400' },
+                                                { id: 'id_back', label: 'ID Back', icon: CreditCard, color: 'text-indigo-400' },
+                                                { id: 'police_form', label: 'Police Form', icon: FileText, color: 'text-purple-400' },
+                                                { id: 'agreement', label: 'Agreement Form', icon: FileText, color: 'text-green-400' }
+                                            ].map(doc => (
+                                                <div key={doc.id} className="space-y-2">
+                                                    <label className="text-[10px] text-white/40 uppercase tracking-widest block font-bold">{doc.label}</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`p-2 rounded-lg bg-white/5 border border-white/10 ${doc.color} flex items-center gap-2 flex-grow min-w-0`}>
+                                                            <doc.icon size={14} />
+                                                            <span className="text-[10px] truncate max-w-[100px]">
+                                                                {editingTenant.new_files?.[doc.id]?.name || (editingTenant[`${doc.id}_url`] ? 'Uploaded' : 'No File')}
+                                                            </span>
+                                                        </div>
+                                                        <label className="p-2 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer transition-all border border-blue-500/20">
+                                                            <input 
+                                                                type="file" 
+                                                                className="hidden" 
+                                                                accept="image/*,.pdf"
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files[0];
+                                                                    if (file) {
+                                                                        setEditingTenant({
+                                                                            ...editingTenant,
+                                                                            new_files: { ...editingTenant.new_files, [doc.id]: file }
+                                                                        });
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <Save size={14} />
+                                                        </label>
                                                     </div>
-                                                    <label className="p-2 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 cursor-pointer transition-all border border-blue-500/20">
-                                                        <input 
-                                                            type="file" 
-                                                            className="hidden" 
-                                                            accept="image/*,.pdf"
-                                                            onChange={(e) => {
-                                                                const file = e.target.files[0];
-                                                                if (file) {
-                                                                    setEditingTenant({
-                                                                        ...editingTenant,
-                                                                        new_files: { ...editingTenant.new_files, [doc.id]: file }
-                                                                    });
-                                                                }
-                                                            }}
-                                                        />
-                                                        <Save size={14} />
-                                                    </label>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                                 <button type="submit"
@@ -858,130 +921,11 @@ const Tenants = () => {
                                     className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
                                     Cancel
                                 </button>
-                                <button onClick={handleDelete} disabled={archiveLoading}
-                                    className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-lg shadow-red-500/30 disabled:opacity-50">
-                                    {archiveLoading ? 'Archiving...' : 'Archive Now'}
+                                <button onClick={handleDelete}
+                                    className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-lg shadow-red-500/30">
+                                    Archive Now
                                 </button>
                             </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* ── PERMANENT DELETE CONFIRMATION MODAL ── */}
-            <AnimatePresence>
-                {permanentDeleteConfirm && (
-                    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            onClick={() => setPermanentDeleteConfirm(null)}
-                            className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                            className="glass-card w-full max-w-sm p-8 border-red-700/50 shadow-2xl relative z-[1000] text-center">
-                            <div className="w-16 h-16 bg-red-700/30 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                                <Flame size={32} className="text-red-500" />
-                            </div>
-                            <h3 className="text-xl font-bold text-white mb-2">⚠️ Permanent Delete</h3>
-                            <p className="text-white/60 mb-2">
-                                You are about to <span className="text-red-400 font-bold">permanently delete</span> <span className="text-white font-bold">{permanentDeleteConfirm.name}</span>.
-                            </p>
-                            <p className="text-red-400/80 text-xs bg-red-900/20 border border-red-700/30 rounded-xl p-3 mb-6">
-                                ⛔ This action is <strong>irreversible</strong>. All financial records, documents, and ledger history for this tenant will be permanently erased from the database.
-                            </p>
-                            <div className="flex gap-3">
-                                <button onClick={() => setPermanentDeleteConfirm(null)}
-                                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
-                                    Cancel
-                                </button>
-                                <button onClick={handlePermanentDelete} disabled={permanentDeleteLoading}
-                                    className="flex-1 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold transition-all shadow-lg shadow-red-700/40 flex items-center justify-center gap-2 disabled:opacity-50">
-                                    <Flame size={16} /> {permanentDeleteLoading ? 'Deleting...' : 'Delete Forever'}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* ── ADD MANUAL CHARGE MODAL ── */}
-            <AnimatePresence>
-                {chargeModalTenant && (
-                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            onClick={() => setChargeModalTenant(null)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-md" />
-                        <motion.div initial={{ scale: 0.9, opacity: 0, y: 50 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 50 }}
-                            className="glass-card w-full max-w-lg p-8 border-purple-500/30 shadow-2xl relative z-[1010]">
-                            
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                        <Receipt className="text-purple-400" size={24} /> Add Manual Charge
-                                    </h3>
-                                    <p className="text-white/50 text-sm mt-1">Tenant: <span className="font-bold text-white">{chargeModalTenant.name}</span></p>
-                                </div>
-                                <button onClick={() => setChargeModalTenant(null)} className="text-white/30 hover:text-white transition-colors">
-                                    <X size={20} />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleAddCharge} className="space-y-4 pt-2">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Charge Type *</label>
-                                        <select 
-                                            value={chargeForm.type}
-                                            onChange={(e) => setChargeForm({...chargeForm, type: e.target.value})}
-                                            className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer"
-                                        >
-                                            <option value="RENT">Rent Arrears</option>
-                                            <option value="DEPOSIT">Security Deposit</option>
-                                            <option value="UTILITY">Utility Bill</option>
-                                            <option value="FINE">Fine / Warning Penalty</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Amount (Rs.) *</label>
-                                        <input type="number" step="any" required min="1"
-                                            value={chargeForm.amount}
-                                            onChange={(e) => setChargeForm({...chargeForm, amount: e.target.value})}
-                                            placeholder="e.g. 50000"
-                                            className="glass-input w-full h-12 px-4 rounded-xl placeholder:text-white/20" 
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Bill Generated Date (For Backdating) *</label>
-                                    <input type="date" required
-                                        value={chargeForm.date}
-                                        title="Select a past date to backdate this bill to when it actually occurred"
-                                        onChange={(e) => setChargeForm({...chargeForm, date: e.target.value})}
-                                        className="glass-input w-full h-12 px-4 rounded-xl bg-black/40 text-white cursor-pointer" 
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Description / Note</label>
-                                    <input type="text"
-                                        value={chargeForm.description}
-                                        onChange={(e) => setChargeForm({...chargeForm, description: e.target.value})}
-                                        placeholder="Optional explanation for this charge..."
-                                        className="glass-input w-full h-12 px-4 rounded-xl placeholder:text-white/20" 
-                                    />
-                                </div>
-
-                                <div className="pt-4 flex gap-3">
-                                    <button type="button" onClick={() => setChargeModalTenant(null)}
-                                        className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all">
-                                        Cancel
-                                    </button>
-                                    <button type="submit" disabled={chargeLoading}
-                                        className="flex-1 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold flex items-center justify-center shadow-lg shadow-purple-500/20 transition-all disabled:opacity-50">
-                                        {chargeLoading ? 'Adding...' : 'Apply Charge'}
-                                    </button>
-                                </div>
-                            </form>
-
                         </motion.div>
                     </div>
                 )}

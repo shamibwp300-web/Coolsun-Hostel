@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Bed, Check, Upload, FileText, Camera, AlertCircle, Shield, Wifi, Users, X } from 'lucide-react';
+import { User, Bed, Check, Upload, FileText, Camera, AlertCircle, Shield, Wifi, Users } from 'lucide-react';
 import axios from 'axios';
 
 // --- Steps Definition ---
@@ -13,40 +13,22 @@ const steps = [
 // Removed mockRooms - now using live state in component
 
 // --- Upload Card Component ---
-const UploadCard = ({ title, icon: Icon, file, onSelect, onRemove }) => {
+const UploadCard = ({ title, icon: Icon, file, onSelect }) => {
   return (
     <div className="relative group cursor-pointer">
       <input
         type="file"
-        key={file ? file.name : 'empty'}
         className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer"
-        onChange={(e) => {
-           if(e.target.files && e.target.files[0]) {
-               onSelect(e.target.files[0]);
-           }
-        }}
-        accept="image/*,.pdf,.doc,.docx"
+        onChange={(e) => onSelect(e.target.files[0])}
+        accept="image/*"
       />
-      {file && (
-        <button 
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if(onRemove) onRemove();
-          }}
-          className="absolute top-2 right-2 z-30 p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 text-white shadow-lg transition-colors border border-red-400"
-          title="Remove File"
-        >
-          <X size={14} strokeWidth={3} />
-        </button>
-      )}
       <div className={`glass-card p-6 flex flex-col items-center justify-center h-48 border-2 border-dashed transition-all ${file ? 'border-green-500/50 bg-green-500/10' : 'border-white/10 hover:border-blue-500/30'}`}>
         {file ? (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex flex-col items-center w-full">
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex flex-col items-center">
             <div className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center mb-2 shadow-lg shadow-green-500/20">
               <Check className="text-white" />
             </div>
-            <span className="text-sm font-medium text-green-400 truncate w-full max-w-[150px] text-center">{file.name}</span>
+            <span className="text-sm font-medium text-green-400">{file.name}</span>
             <span className="text-xs text-white/30 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
           </motion.div>
         ) : (
@@ -114,8 +96,7 @@ const Wizard = () => {
     billingMode: 'pro-rata', // 'full', 'pro-rata', or 'private'
     baseRent: 0, // Store original room rent
     roomTotalRent: 0, // Store full room rent
-    tenancyType: 'Shared', // 'Shared' or 'Private'
-    isRentResponsible: true // NEW: Toggle for sub-tenant rent
+    tenancyType: 'Shared' // 'Shared' or 'Private'
   });
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
@@ -147,7 +128,7 @@ const Wizard = () => {
           roomTotalRent: 0,
           rent: 0, 
           tenancyType: 'Shared',
-          parentTenantId: room.bulk_tenant_id ? room.bulk_tenant_id.toString() : '' 
+          parentTenantId: room.bulk_tenant_id ? room.bulk_tenant_id.toString() : 'bulk' 
       });
       fetchRoomTenants(room.id);
       nextStep();
@@ -199,17 +180,12 @@ const Wizard = () => {
     const activeBase = formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent;
     const breakdown = calculateRentBreakdown(activeBase, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate);
     
-    // NEW: If tenant is NOT responsible for rent (covered by primary), force to 0
-    const finalRent = formData.isRentResponsible ? breakdown.total : 0;
-    const finalBase = formData.isRentResponsible ? activeBase : 0;
-
     setFormData(prev => ({ 
       ...prev, 
-      rent: finalRent,
-      baseRent: finalBase,
+      rent: breakdown.total,
       tenancyType: formData.billingMode === 'private' ? 'Private' : 'Shared'
     }));
-  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent, formData.isRentResponsible]);
+  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent]);
 
   const canProceedBilling = () => {
     if (currentStep !== 3) return true;
@@ -217,12 +193,6 @@ const Wizard = () => {
     const security = Number(formData.securityDeposit);
     const paid = Number(formData.amountPaidNow);
     return rent >= 0 && security >= 0 && paid >= 0;
-  };
-
-  const canProceedStep2 = () => {
-    if (formData.parentTenantId === 'select') return false;
-    if (!formData.name || !formData.phone || !formData.cnic) return false;
-    return true;
   };
 
   const handleFileSelect = (type, file) => {
@@ -281,12 +251,9 @@ const Wizard = () => {
       // Open WhatsApp in new tab
       window.open(waUrl, '_blank');
       
-      // Redirect current tab after a slight delay
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 500);
+      // Redirect current tab
+      window.location.href = '/dashboard';
     } catch (error) {
-      console.error("Onboarding Error:", error);
       alert("Error: " + (error.response?.data?.error || error.message));
     } finally {
       setIsSubmitting(false);
@@ -421,38 +388,38 @@ const Wizard = () => {
               </div>
 
               {formData.parentTenantId && (
-                  </select>
+                <div className="animate-in fade-in slide-in-from-top-2 mt-4 space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wider text-yellow-500 flex items-center">
+                    <AlertCircle size={14} className="mr-1" /> Select Primary Roommate
+                  </label>
+                  {/* Special Handle for Bulk Rented Rooms */}
+                  {liveRooms.find(r => r.id === formData.roomId)?.is_bulk_rented ? (
+                    <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                      <p className="text-sm font-bold text-purple-400">
+                        Room is under Bulk Agreement
+                      </p>
+                      <p className="text-xs text-white/60 mt-1">
+                        Rent and security are covered by the Bulk Owner. This tenant will be registered as a sub-tenant.
+                      </p>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.parentTenantId === 'select' ? '' : formData.parentTenantId}
+                      onChange={(e) => setFormData({ ...formData, parentTenantId: e.target.value })}
+                      className="glass-input w-full h-12 px-4 rounded-xl text-white bg-black/40 border-yellow-500/30 focus:border-yellow-500/50"
+                    >
+                      <option value="" disabled>-- Choose Primary Holder --</option>
+                      {roomTenants.map(t => (
+                        <option key={t.id} value={t.id}>{t.name} (Bed: {t.bed_label || 'N/A'})</option>
+                      ))}
+                      {roomTenants.length === 0 && (
+                        <option value="" disabled>No existing tenants in this room. You must be Primary.</option>
+                      )}
+                    </select>
+                  )}
                 </div>
               )}
             </div>
-
-            {formData.parentTenantId && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block">Rent Responsibility</label>
-                <div
-                  className={`glass-card p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${formData.isRentResponsible ? 'border-blue-500/50 bg-blue-500/10 shadow-lg shadow-blue-500/5' : 'border-white/10 bg-black/20 opacity-60'}`}
-                  onClick={() => setFormData({ ...formData, isRentResponsible: !formData.isRentResponsible })}
-                >
-                  <div className="flex items-center">
-                    <User size={18} className={formData.isRentResponsible ? "text-blue-400 mr-3" : "text-white/30 mr-3"} />
-                    <div>
-                      <div className="text-white font-bold text-sm">
-                        {formData.isRentResponsible ? 'Tenant Pays Rent' : 'Rent Covered by Primary'}
-                      </div>
-                      <div className="text-xs text-white/50 mt-0.5">
-                        {formData.isRentResponsible 
-                          ? 'This tenant will be charged an independent share of room rent.' 
-                          : 'This tenant will have Rs. 0 monthly rent. Data collected for compliance only.'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className={`w-10 h-6 rounded-full transition-colors flex items-center p-1 ${formData.isRentResponsible ? 'bg-blue-600' : 'bg-white/10'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${formData.isRentResponsible ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </div>
-                </div>
-              </div>
-            )}
-
 
             <div className="space-y-2">
               <label className="text-xs font-medium uppercase tracking-wider text-white/40">Full Name (English / Urdu)</label>
@@ -670,20 +637,11 @@ const Wizard = () => {
                <div className="pt-4 border-t border-white/10 flex justify-between items-end">
                   <div>
                     <div className="text-[10px] text-white/40 uppercase font-black mb-1">Per-Day Rate</div>
-                    <div className="text-xs text-white/60">Rs. {formData.isRentResponsible ? calculateRentBreakdown(formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate).perDay : '0.00'}</div>
+                    <div className="text-xs text-white/60">Rs. {calculateRentBreakdown(formData.billingMode === 'private' ? formData.roomTotalRent : formData.baseRent, formData.billingMode === 'full' ? 'full' : 'pro-rata', formData.moveInDate).perDay}</div>
                   </div>
                   <div className="text-right">
-                    {!formData.isRentResponsible ? (
-                      <div className="px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                        <span className="text-[10px] font-black uppercase tracking-tighter text-yellow-500">Billing Covered by Primary</span>
-                        <div className="text-2xl font-mono font-black text-white/20 line-through decoration-white/40">Rs. {Number(formData.rent).toLocaleString()}</div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-[10px] text-green-400 uppercase font-black mb-1">Calculated Rent</div>
-                        <div className="text-2xl font-mono font-black text-green-400">Rs. {Number(formData.rent).toLocaleString()}</div>
-                      </>
-                    )}
+                    <div className="text-[10px] text-green-400 uppercase font-black mb-1">Calculated Rent</div>
+                    <div className="text-2xl font-mono font-black text-green-400">Rs. {Number(formData.rent).toLocaleString()}</div>
                   </div>
                </div>
             </div>
@@ -740,28 +698,24 @@ const Wizard = () => {
                 icon={FileText}
                 file={formData.files.id_front}
                 onSelect={(f) => handleFileSelect('id_front', f)}
-                onRemove={() => handleFileSelect('id_front', null)}
               />
               <UploadCard
                 title="ID Back"
                 icon={FileText}
                 file={formData.files.id_back}
                 onSelect={(f) => handleFileSelect('id_back', f)}
-                onRemove={() => handleFileSelect('id_back', null)}
               />
               <UploadCard
                 title="Agreement"
                 icon={FileText}
                 file={formData.files.agreement}
                 onSelect={(f) => handleFileSelect('agreement', f)}
-                onRemove={() => handleFileSelect('agreement', null)}
               />
               <UploadCard
                 title="Police Form"
                 icon={Shield}
                 file={formData.files.police_form}
                 onSelect={(f) => handleFileSelect('police_form', f)}
-                onRemove={() => handleFileSelect('police_form', null)}
               />
             </div>
             {!formData.files.police_form && (
@@ -842,7 +796,7 @@ const Wizard = () => {
         {currentStep < 5 && (
           <button
             onClick={nextStep}
-            disabled={!canProceedBilling() || (currentStep === 2 && !canProceedStep2())}
+            disabled={!canProceedBilling()}
             className="px-8 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/30 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next Step
