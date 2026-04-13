@@ -4,9 +4,10 @@ import {
   Video, Plus, Settings, Trash2, Edit2, 
   Maximize2, Grid, Layout, Monitor, 
   HelpCircle, Shield, X, Check, ExternalLink,
-  Lock, RefreshCw
+  Lock, RefreshCw, Scan, Camera
 } from 'lucide-react';
 import axios from 'axios';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const CCTV = () => {
   const [cameras, setCameras] = useState([]);
@@ -15,6 +16,7 @@ const CCTV = () => {
   const [editingCamera, setEditingCamera] = useState(null);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'manage'
   const [gridCols, setGridCols] = useState(2); // 1, 2, 3 cols
+  const [isScanning, setIsScanning] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -43,6 +45,37 @@ const CCTV = () => {
   useEffect(() => {
     fetchCameras();
   }, []);
+
+  useEffect(() => {
+    let scanner = null;
+    if (isScanning && showModal) {
+      scanner = new Html5QrcodeScanner("reader", { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 },
+        rememberLastUsedCamera: true,
+        showTorchButtonIfSupported: true
+      });
+
+      scanner.render((decodedText) => {
+        // Success callback
+        if (decodedText.startsWith('http')) {
+          setFormData(prev => ({ ...prev, url: decodedText, type: 'Stream' }));
+        } else {
+          setFormData(prev => ({ ...prev, name: `Cam - ${decodedText}` }));
+        }
+        setIsScanning(false);
+        scanner.clear().catch(e => console.error("Failed to clear scanner", e));
+      }, (error) => {
+        // Error callback (silent to avoid spamming the console)
+      });
+    }
+
+    return () => {
+      if (scanner) {
+        scanner.clear().catch(e => console.error("Clean up error", e));
+      }
+    };
+  }, [isScanning, showModal]);
 
   const handleOpenModal = (camera = null) => {
     if (camera) {
@@ -328,6 +361,32 @@ const CCTV = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                <div className="flex justify-center mb-4">
+                  {!isScanning ? (
+                    <button 
+                      type="button"
+                      onClick={() => setIsScanning(true)}
+                      className="flex items-center gap-2 px-6 py-2 rounded-xl bg-blue-600/10 border border-blue-500/30 text-blue-400 text-xs font-black uppercase tracking-widest hover:bg-blue-600/20 transition-all"
+                    >
+                      <Scan size={16} /> Scan Camera Sticker
+                    </button>
+                  ) : (
+                    <div className="w-full">
+                      <div id="reader" className="overflow-hidden rounded-2xl border-2 border-blue-500/30 bg-black/40" />
+                      <button 
+                        type="button" 
+                        onClick={() => setIsScanning(false)}
+                        className="mt-2 w-full text-[10px] text-white/30 uppercase font-black hover:text-red-400 transition-colors"
+                      >
+                        Cancel Scanning
+                      </button>
+                      <p className="mt-2 text-[8px] text-white/20 text-center uppercase tracking-widest font-bold">
+                        Note: Camera access requires a secure (HTTPS) connection.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2">Node Identity</label>
                   <input 
