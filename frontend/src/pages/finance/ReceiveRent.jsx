@@ -55,7 +55,11 @@ const ReceiveRent = () => {
         try {
             const res = await axios.get(`/api/finance/room-summary/${searchTerm}`);
             setRoomData(res.data);
-            setPaymentAmount(res.data.total_pending.toString());
+            if (res.data.bulk_details?.is_bulk) {
+                setPaymentAmount(res.data.bulk_details.bulk_balance.toString());
+            } else {
+                setPaymentAmount(res.data.total_pending.toString());
+            }
         } catch (e) {
             setResult({ success: false, message: e.response?.data?.error || "Room not found or no active tenants." });
         }
@@ -67,23 +71,35 @@ const ReceiveRent = () => {
         
         setSubmitting(true);
         try {
-            let remaining = parseFloat(paymentAmount);
-            const allTenants = [...roomData.primary, ...roomData.sub_tenants];
+            const amountDecimal = parseFloat(paymentAmount);
             
-            for (const tenant of allTenants) {
-                if (remaining <= 0) break;
-                if (tenant.balance <= 0) continue;
-                
-                const amountToPay = Math.min(remaining, tenant.balance);
+            if (roomData.bulk_details?.is_bulk) {
+                // Bulk payment targets the bulk tenant specifically
                 await axios.post('/api/finance/pay', {
-                    tenant_id: tenant.id,
-                    amount: amountToPay,
+                    tenant_id: roomData.bulk_details.bulk_tenant_id,
+                    amount: amountDecimal,
                     payment_method: 'Cash'
                 });
-                remaining -= amountToPay;
+            } else {
+                // Traditional distribution for non-bulk rooms
+                let remaining = amountDecimal;
+                const allTenants = [...roomData.primary, ...roomData.sub_tenants];
+                
+                for (const tenant of allTenants) {
+                    if (remaining <= 0) break;
+                    if (tenant.balance <= 0) continue;
+                    
+                    const amountToPay = Math.min(remaining, tenant.balance);
+                    await axios.post('/api/finance/pay', {
+                        tenant_id: tenant.id,
+                        amount: amountToPay,
+                        payment_method: 'Cash'
+                    });
+                    remaining -= amountToPay;
+                }
             }
             
-            setResult({ success: true, message: `Successfully collected Rs. ${paymentAmount} for Room ${roomData.room_number}.` });
+            setResult({ success: true, message: `Successfully collected Rs. ${paymentAmount} for ${roomData.bulk_details?.is_bulk ? 'Bulk Agreement' : 'Room ' + roomData.room_number}.` });
             setRoomData(null);
             setSearchTerm('');
             setPaymentAmount('');
@@ -190,11 +206,34 @@ const ReceiveRent = () => {
                                         
                                         <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
                                             <div className="flex justify-between items-end">
-                                                <span className="text-xs text-white/30 font-bold uppercase">Total Pending</span>
-                                                <span className="text-2xl font-black text-red-400">Rs. {roomData.total_pending.toLocaleString()}</span>
+                                                <span className="text-xs text-white/30 font-bold uppercase">
+                                                    {roomData.bulk_details?.is_bulk ? 'Bulk Group Total' : 'Total Pending'}
+                                                </span>
+                                                <span className={`text-2xl font-black ${roomData.bulk_details?.is_bulk ? 'text-blue-400' : 'text-red-400'}`}>
+                                                    Rs. {(roomData.bulk_details?.is_bulk ? roomData.bulk_details.bulk_balance : roomData.total_pending).toLocaleString()}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
+
+                                    {roomData.bulk_details?.is_bulk && (
+                                        <div className="glass-panel p-6 rounded-3xl border border-blue-500/30 bg-blue-500/10 shadow-xl overflow-hidden relative">
+                                            <div className="absolute top-0 right-0 p-4 opacity-10">
+                                                <ShieldCheck size={48} className="text-blue-500" />
+                                            </div>
+                                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-4">Bulk Rental Linked Rooms</h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {roomData.bulk_details.linked_rooms.map(roomNum => (
+                                                    <span key={roomNum} className={`px-2 py-1 rounded-lg text-[10px] font-black border ${roomNum === roomData.room_number ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white/5 border-white/10 text-white/40'}`}>
+                                                        {roomNum}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <p className="mt-4 text-[9px] text-white/30 font-medium leading-relaxed italic">
+                                                * These rooms are billed as a single group to the bulk agreement holder.
+                                            </p>
+                                        </div>
+                                    )}
 
                                     <div className="glass-panel p-8 rounded-3xl border border-white/5 space-y-6">
                                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Collect Payment</h3>
@@ -227,7 +266,59 @@ const ReceiveRent = () => {
 
                                 {/* Hierarchical Breakdown */}
                                 <div className="lg:col-span-2 space-y-4">
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2">Primary Resident (Primary Holder)</h3>
+                                    {roomData.bulk_details?.is_bulk ? (
+                                        <>
+                                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 px-2">Bulk Agreement Holder</h3>
+                                            <div className="glass-panel p-6 rounded-3xl border-2 border-blue-500/50 bg-blue-500/20 shadow-2xl relative overflow-hidden group">
+                                                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                                                    <ShieldCheck size={80} />
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-blue-500/20">
+                                                            {roomData.bulk_details.bulk_tenant_name.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-2xl font-black text-white">{roomData.bulk_details.bulk_tenant_name}</h4>
+                                                            <div className="flex items-center gap-4 text-white/40 text-[10px] mt-2 font-bold tracking-widest uppercase">
+                                                                <span className="flex items-center gap-1 text-blue-400"><ShieldCheck size={14} /> Agreement Owner</span>
+                                                                <span>• Floor: {roomData.bulk_details.floor_name}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-blue-400 font-black text-2xl">Rs. {roomData.bulk_details.bulk_balance.toLocaleString()}</div>
+                                                        <div className="text-[10px] text-white/20 uppercase font-bold tracking-widest mt-1">Agreement Balance</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="mt-8 space-y-4">
+                                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2">Registered Sub-Tenants (Current Room)</h3>
+                                                {roomData.primary.map(tenant => (
+                                                    <div key={tenant.id} className="glass-panel p-5 rounded-2xl border border-white/10 bg-white/5 opacity-60">
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-white/40 font-bold">
+                                                                    {tenant.name.charAt(0)}
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="text-base font-bold text-white/80">{tenant.name}</h4>
+                                                                    <p className="text-[10px] text-white/20 uppercase font-bold tracking-widest">Lives here • Bed {tenant.bed}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-white/40 font-bold text-sm">Rs. 0</div>
+                                                                <p className="text-[8px] text-white/20 font-bold uppercase tracking-widest mt-0.5">Rent Included</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 px-2">Primary Resident (Primary Holder)</h3>
                                     {roomData.primary.map(tenant => (
                                         <div key={tenant.id} className="glass-panel p-6 rounded-3xl border-2 border-blue-500/30 bg-blue-500/10 shadow-xl">
                                             <div className="flex justify-between items-center">

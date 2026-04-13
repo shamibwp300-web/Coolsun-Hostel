@@ -9,6 +9,28 @@ const GenerateRent = () => {
     const [billingMonth, setBillingMonth] = useState(''); // YYYY-MM
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
+    const [bulkDetected, setBulkDetected] = useState(null);
+
+    // Debounced check for bulk room
+    React.useEffect(() => {
+        if (mode === 'ROOM' && roomNumber.length >= 3) {
+            const timer = setTimeout(async () => {
+                try {
+                    const res = await axios.get(`/api/finance/room-summary/${roomNumber}`);
+                    if (res.data.bulk_details?.is_bulk) {
+                        setBulkDetected(res.data.bulk_details);
+                    } else {
+                        setBulkDetected(null);
+                    }
+                } catch (e) {
+                    setBulkDetected(null);
+                }
+            }, 500);
+            return () => clearTimeout(timer);
+        } else {
+            setBulkDetected(null);
+        }
+    }, [roomNumber, mode]);
 
     const handleGenerate = async () => {
         if (mode === 'ROOM' && !roomNumber) return alert("Please enter a room number");
@@ -90,6 +112,14 @@ const GenerateRent = () => {
                                     className="glass-input w-full h-12 px-4 rounded-xl text-lg font-mono font-bold tracking-widest placeholder:text-white/10 focus:border-blue-500"
                                     autoFocus
                                 />
+                                {bulkDetected && (
+                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center gap-3">
+                                        <ShieldCheck size={16} className="text-blue-400 shrink-0" />
+                                        <p className="text-[10px] font-bold text-blue-400 leading-tight">
+                                            BULK AGREEMENT DETECTED: This room is part of {bulkDetected.floor_name} group ({bulkDetected.linked_rooms.join(', ')}).
+                                        </p>
+                                    </motion.div>
+                                )}
                             </motion.div>
                         )}
                     </div>

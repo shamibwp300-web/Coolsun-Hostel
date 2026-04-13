@@ -219,37 +219,61 @@ def generate_bulk_rent():
     generated = 0
     
     # 1. Generate Rent for Bulk Rented Floors
-    # (Only if no specific room selected, or if the room belongs to a bulk-rented floor)
-    # Since bulk rent is floor-based, we'll only do this if room_number is None
-    if not room_number:
+    # We do this if no room_number is provided, OR if the room_number provided belongs to a bulk-rented floor
+    valid_bulk_rooms = []
+    if room_number:
+        from backend.models import Room
+        clean_num = str(room_number).strip()
+        room_obj = Room.query.filter_by(number=clean_num, deleted_at=None).first()
+        if room_obj and room_obj.is_bulk_rented and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
+            # The specifically targeted room is part of a bulk agreement
+            bulk_floors = [room_obj.floor_ref]
+            valid_bulk_rooms = [r.number for r in room_obj.floor_ref.rooms if r.is_bulk_rented and r.deleted_at is None]
+        else:
+            bulk_floors = []
+    else:
         bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
-        for f in bulk_floors:
-            if not f.bulk_tenant_id:
-                continue
-                
-            floor_description = f"Bulk Floor Rent ({f.name}) - {display_month}"
+
+    bulk_processed_log = []
+    for f in bulk_floors:
+        if not f.bulk_tenant_id:
+            continue
             
-            # Check if already billed for this FLOOR specifically in this month
-            existing = Ledger.query.filter(
-                Ledger.tenant_id == f.bulk_tenant_id, 
-                Ledger.type == 'RENT', 
-                Ledger.deleted_at == None,
-                Ledger.description.contains(f"({f.name})")
-            ).all()
-            
-            already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
-            
-            if not already_billed:
-                l = Ledger(
-                    tenant_id=f.bulk_tenant_id,
-                    amount=f.bulk_rent_amount or 0,
-                    type='RENT',
-                    status='PENDING',
-                    description=floor_description,
-                    timestamp=timestamp
-                )
-                db.session.add(l)
-                generated += 1
+        floor_description = f"Bulk Floor Rent ({f.name}) - {display_month}"
+        
+        # Check if already billed for this FLOOR specifically in this month
+        existing = Ledger.query.filter(
+            Ledger.tenant_id == f.bulk_tenant_id, 
+            Ledger.type == 'RENT', 
+            Ledger.deleted_at == None,
+            Ledger.description.contains(f"({f.name})")
+        ).all()
+        
+        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        
+        if not already_billed:
+            l = Ledger(
+                tenant_id=f.bulk_tenant_id,
+                amount=f.bulk_rent_amount or 0,
+                type='RENT',
+                status='PENDING',
+                description=floor_description,
+                timestamp=timestamp
+            )
+            db.session.add(l)
+            generated += 1
+            bulk_processed_log.append(f.name)
+        elif room_number:
+            # Special message if explicitly requested but already done
+            return jsonify({"message": f"Bulk Rental for {f.name} (Rooms {', '.join(valid_bulk_rooms)}) was already generated for {display_month}."}), 200
+
+    # If we targeted a bulk room and processed it, we can stop early or skip individual checks
+    if room_number and valid_bulk_rooms:
+        db.session.commit()
+        return jsonify({
+            "message": f"Successfully generated Bulk Billing for {bulk_processed_log[0] if bulk_processed_log else 'Floor'} (Group: {', '.join(valid_bulk_rooms)}) for {display_month}.",
+            "generated_items": generated
+        }), 200
 
     # 2. Generate Rent for Regular Tenants
     query = Tenant.query.filter_by(deleted_at=None)
@@ -270,12 +294,11 @@ def generate_bulk_rent():
         app.logger.warning(f"No active tenants found for room number {room_number} (ID {room_obj.id if room_obj else '??'})")
 
     for t in tenants:
-        # If targeting a specific room, we bypass the bulk-floor skip 
-        # because the admin is explicitly asking for this room's invoices.
-        if not room_number:
-            if not t.room or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented):
-                continue
-        
+        # CRITICAL: If a room or its floor is bulk rented, skip individual billing
+        # because the whole unit is paid for by the bulk tenant.
+        if t.room and (t.room.is_bulk_rented or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented)):
+            continue
+            
         # Determine rent amount and type early
         rent_amount = 0
         if t.billing_profile and t.billing_profile.rent_amount:
@@ -463,11 +486,32 @@ def get_room_summary(room_number):
     res_primary = [get_tenant_summary(t) for t in primary_tenants]
     res_sub = [get_tenant_summary(t) for t in sub_tenants]
     
-    total_room_pending = sum(p['balance'] for p in res_primary) + sum(s['balance'] for s in res_sub)
-    
+    # NEW: Bulk Information
+    bulk_details = None
+    if room_obj.is_bulk_rented and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
+        floor = room_obj.floor_ref
+        from backend.models import Tenant
+        bulk_tenant = Tenant.query.get(floor.bulk_tenant_id) if floor.bulk_tenant_id else None
+        
+        # Calculate Bulk Tenant Balance
+        bulk_balance = 0
+        if bulk_tenant:
+            pending_ledgers = Ledger.query.filter_by(tenant_id=bulk_tenant.id, status='PENDING', deleted_at=None).all()
+            bulk_balance = sum(float(l.amount) for l in pending_ledgers)
+            
+        bulk_details = {
+            "is_bulk": True,
+            "floor_name": floor.name,
+            "bulk_tenant_id": floor.bulk_tenant_id,
+            "bulk_tenant_name": bulk_tenant.name if bulk_tenant else "No Tenant Assigned",
+            "bulk_balance": bulk_balance,
+            "linked_rooms": [r.number for r in floor.rooms if r.is_bulk_rented and r.deleted_at is None]
+        }
+        
     return jsonify({
-        "room_number": room_number,
+        "room_number": room_obj.number,
         "primary": res_primary,
         "sub_tenants": res_sub,
-        "total_pending": total_room_pending
+        "bulk_details": bulk_details,
+        "total_pending": sum(t['balance'] for t in res_primary) + sum(t['balance'] for t in res_sub)
     }), 200
