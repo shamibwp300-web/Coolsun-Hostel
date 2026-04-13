@@ -41,7 +41,7 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="dashboard">
                 <Layout>
                   <Dashboard />
                 </Layout>
@@ -52,7 +52,7 @@ function App() {
           <Route
             path="/wizard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="wizard">
                 <Layout>
                   <Wizard />
                 </Layout>
@@ -63,7 +63,7 @@ function App() {
           <Route
             path="/reports"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="reports">
                 <Layout>
                   <Reports />
                 </Layout>
@@ -74,7 +74,7 @@ function App() {
           <Route
             path="/rooms"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="rooms">
                 <Layout>
                   <Rooms />
                 </Layout>
@@ -85,7 +85,7 @@ function App() {
           <Route
             path="/bulk-rent"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="bulk_rent">
                 <Layout>
                   <BulkRenting />
                 </Layout>
@@ -96,7 +96,7 @@ function App() {
           <Route
             path="/tenants"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="tenants">
                 <Layout>
                   <Tenants />
                 </Layout>
@@ -107,7 +107,7 @@ function App() {
           <Route
             path="/finance"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="finance">
                 <Layout>
                   <Finance />
                 </Layout>
@@ -117,7 +117,7 @@ function App() {
           <Route
             path="/finance/generate"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="finance">
                 <Layout>
                   <GenerateRent />
                 </Layout>
@@ -127,7 +127,7 @@ function App() {
           <Route
             path="/finance/receive"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="finance">
                 <Layout>
                   <ReceiveRent />
                 </Layout>
@@ -138,7 +138,7 @@ function App() {
           <Route
             path="/settings"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="settings">
                 <Layout>
                   <Settings />
                 </Layout>
@@ -149,7 +149,7 @@ function App() {
           <Route
             path="/maintenance"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="maintenance">
                 <Layout>
                   <div className="glass-panel p-8">
                     <h1 className="text-3xl font-bold mb-6">Maintenance Hub</h1>
@@ -163,7 +163,7 @@ function App() {
           <Route
             path="/electricity"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="electricity">
                 <Layout>
                   <Electricity />
                 </Layout>
@@ -173,7 +173,7 @@ function App() {
           <Route
             path="/police"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="police">
                 <Layout>
                   <PoliceVerification />
                 </Layout>
@@ -183,7 +183,7 @@ function App() {
           <Route
             path="/tasks"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="tasks">
                 <Layout>
                   <Tasks />
                 </Layout>
@@ -193,7 +193,7 @@ function App() {
           <Route
             path="/audit"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute module="audit">
                 <Layout>
                   <AuditLog />
                 </Layout>

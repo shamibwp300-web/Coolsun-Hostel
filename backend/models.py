@@ -20,6 +20,7 @@ class User(db.Model, SoftDeleteMixin):
     username = db.Column(db.String(50), unique=True)
     password_hash = db.Column(db.String(255))
     role = db.Column(db.Enum("Owner", "Manager", "Admin"))
+    permissions = db.Column(db.JSON, nullable=True) # {"dashboard": true, "tenants": true, ...}
     is_on_duty = db.Column(db.Boolean, default=True)
     def set_password(self, pw): self.password_hash = generate_password_hash(pw)
     def check_password(self, pw): return check_password_hash(self.password_hash, pw)

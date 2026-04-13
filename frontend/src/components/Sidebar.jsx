@@ -26,10 +26,19 @@ const Sidebar = ({ mode = 'desktop' }) => {
   const rawRole = localStorage.getItem('userRole');
   const userRole = rawRole ? rawRole.replace(/"/g, '') : 'Admin';
 
+  const rawPerms = localStorage.getItem('userPermissions');
+  const userPermissions = rawPerms ? JSON.parse(rawPerms) : {};
+
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userPermissions');
     navigate('/login');
+  };
+
+  const hasPermission = (moduleName) => {
+    if (userRole === 'Owner') return true; // Super admins see everything
+    return !!userPermissions[moduleName];
   };
 
   const NavItem = ({ icon, label, to, active }) => (
@@ -64,38 +73,52 @@ const Sidebar = ({ mode = 'desktop' }) => {
       <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-[#1e293b] py-6 px-3 space-y-8">
 
         <div className="space-y-1">
-          <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard Hub" to="/dashboard" active={location.pathname === '/dashboard'} />
+          {hasPermission('dashboard') && (
+            <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard Hub" to="/dashboard" active={location.pathname === '/dashboard'} />
+          )}
         </div>
 
         <div>
-          <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Operations</p>
-          <NavItem icon={<UserPlus size={18} />} label="New Tenant (Wizard)" to="/wizard" active={location.pathname === '/wizard'} />
-          <NavItem icon={<Users size={18} />} label="Tenant Registry" to="/tenants" active={location.pathname === '/tenants'} />
-          <NavItem icon={<Home size={18} />} label="Room Inventory" to="/rooms" active={location.pathname === '/rooms'} />
-          <NavItem icon={<Building2 size={18} />} label="Bulk Rental" to="/bulk-rent" active={location.pathname === '/bulk-rent'} />
-          <NavItem icon={<Shield size={18} />} label="Police Verification" to="/police" active={location.pathname === '/police'} />
-          <NavItem icon={<ListChecks size={18} />} label="Tasks & Staff" to="/tasks" active={location.pathname === '/tasks'} />
+           {(hasPermission('wizard') || hasPermission('tenants') || hasPermission('rooms') || hasPermission('bulk_rent') || hasPermission('police') || hasPermission('tasks')) && (
+            <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Operations</p>
+           )}
+          {hasPermission('wizard') && <NavItem icon={<UserPlus size={18} />} label="New Tenant (Wizard)" to="/wizard" active={location.pathname === '/wizard'} />}
+          {hasPermission('tenants') && <NavItem icon={<Users size={18} />} label="Tenant Registry" to="/tenants" active={location.pathname === '/tenants'} />}
+          {hasPermission('rooms') && <NavItem icon={<Home size={18} />} label="Room Inventory" to="/rooms" active={location.pathname === '/rooms'} />}
+          {hasPermission('bulk_rent') && <NavItem icon={<Building2 size={18} />} label="Bulk Rental" to="/bulk-rent" active={location.pathname === '/bulk-rent'} />}
+          {hasPermission('police') && <NavItem icon={<Shield size={18} />} label="Police Verification" to="/police" active={location.pathname === '/police'} />}
+          {hasPermission('tasks') && <NavItem icon={<ListChecks size={18} />} label="Tasks & Staff" to="/tasks" active={location.pathname === '/tasks'} />}
         </div>
 
         <div>
-          <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Financial Edge</p>
-          <NavItem icon={<Zap size={18} />} label="Utility Billing" to="/electricity" active={location.pathname === '/electricity'} />
-          <NavItem icon={<Calendar size={18} />} label="Generate Rent" to="/finance/generate" active={location.pathname === '/finance/generate'} />
-          <NavItem icon={<DollarSign size={18} />} label="Receive Rent" to="/finance/receive" active={location.pathname === '/finance/receive'} />
-          <NavItem icon={<Wallet size={18} />} label="Finance Engine" to="/finance" active={location.pathname === '/finance'} />
+          {hasPermission('electricity') || hasPermission('finance') && (
+            <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Financial Edge</p>
+          )}
+          {hasPermission('electricity') && <NavItem icon={<Zap size={18} />} label="Utility Billing" to="/electricity" active={location.pathname === '/electricity'} />}
+          {hasPermission('finance') && (
+            <>
+              <NavItem icon={<Calendar size={18} />} label="Generate Rent" to="/finance/generate" active={location.pathname === '/finance/generate'} />
+              <NavItem icon={<DollarSign size={18} />} label="Receive Rent" to="/finance/receive" active={location.pathname === '/finance/receive'} />
+              <NavItem icon={<Wallet size={18} />} label="Finance Engine" to="/finance" active={location.pathname === '/finance'} />
+            </>
+          )}
         </div>
 
         <div>
-          <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Maintenance & Comms</p>
-          <NavItem icon={<Wrench size={18} />} label="Issue Inbox" to="/maintenance" active={location.pathname === '/maintenance'} />
-          <NavItem icon={<Video size={18} />} label="CCTV Surveillance" to="/cctv" active={location.pathname === '/cctv'} />
+          {(hasPermission('maintenance') || hasPermission('cctv')) && (
+            <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">Maintenance & Comms</p>
+          )}
+          {hasPermission('maintenance') && <NavItem icon={<Wrench size={18} />} label="Issue Inbox" to="/maintenance" active={location.pathname === '/maintenance'} />}
+          {hasPermission('cctv') && <NavItem icon={<Video size={18} />} label="CCTV Surveillance" to="/cctv" active={location.pathname === '/cctv'} />}
         </div>
 
         <div>
-          <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">System</p>
-          <NavItem icon={<BarChart2 size={18} />} label="Reports" to="/reports" active={location.pathname === '/reports'} />
-          <NavItem icon={<Shield size={18} />} label="Audit Log Vault" to="/audit" active={location.pathname === '/audit'} />
-          <NavItem icon={<Settings size={18} />} label="Settings & Rules" to="/settings" active={location.pathname === '/settings'} />
+          {(hasPermission('reports') || hasPermission('audit') || hasPermission('settings')) && (
+            <p className="px-4 text-[10px] font-bold tracking-widest text-[#8892b0] mb-3 uppercase">System</p>
+          )}
+          {hasPermission('reports') && <NavItem icon={<BarChart2 size={18} />} label="Reports" to="/reports" active={location.pathname === '/reports'} />}
+          {hasPermission('audit') && <NavItem icon={<Shield size={18} />} label="Audit Log Vault" to="/audit" active={location.pathname === '/audit'} />}
+          {hasPermission('settings') && <NavItem icon={<Settings size={18} />} label="Settings & Rules" to="/settings" active={location.pathname === '/settings'} />}
         </div>
 
       </nav>

@@ -36,6 +36,7 @@ const Login = () => {
       if (res.ok) {
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('userRole', data.user.role || 'Admin');
+        localStorage.setItem('userPermissions', JSON.stringify(data.user.permissions || {}));
         navigate('/dashboard');
       } else {
         setError(data.error || 'Login failed');

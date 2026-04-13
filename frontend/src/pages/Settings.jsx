@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Save, Server, Shield, Smartphone, Plus, Trash2, Edit2, Check, X, AlertCircle, AlertTriangle } from 'lucide-react';
 
 import axios from 'axios';
+import UserManagement from './UserManagement';
 
 const API = '/api';
 
@@ -13,7 +14,12 @@ const Settings = () => {
     const [showAddFine, setShowAddFine] = useState(false);
     const [editingFine, setEditingFine] = useState(null); // { id, name, amount, description }
     const [pendingExpenses, setPending] = useState([]);
-    const [expTab, setExpTab] = useState('fines'); // 'fines' | 'approvals'
+    const rawRole = localStorage.getItem('userRole');
+    const userRole = rawRole ? rawRole.replace(/"/g, '') : 'Admin';
+    const rawPerms = localStorage.getItem('userPermissions');
+    const userPermissions = rawPerms ? JSON.parse(rawPerms) : {};
+
+    const [expTab, setExpTab] = useState('fines'); // 'fines' | 'approvals' | 'users'
     const [resetConfirm, setResetConfirm] = useState(false);
     const [resetTyped, setResetTyped] = useState('');
     const [resetting, setResetting] = useState(false);
@@ -167,7 +173,8 @@ const Settings = () => {
                         {[
                             { key: 'fines', label: 'Fine Library' },
                             { key: 'approvals', label: `Pending Approvals (${pendingExpenses.length})` },
-                        ].map(t => (
+                            (userRole === 'Owner' || userPermissions.settings) ? { key: 'users', label: 'User Management' } : null,
+                        ].filter(Boolean).map(t => (
                             <button key={t.key} onClick={() => setExpTab(t.key)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${expTab === t.key
                                     ? 'bg-blue-600 text-white'
@@ -288,6 +295,10 @@ const Settings = () => {
                                 ))
                             )}
                         </div>
+                    )}
+
+                    {expTab === 'users' && (
+                        <UserManagement />
                     )}
                 </div>
 

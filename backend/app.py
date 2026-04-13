@@ -97,6 +97,13 @@ def create_app():
                         conn.execute(text("ALTER TABLE rooms ADD COLUMN meter_number VARCHAR(50)"))
                         conn.commit()
                         app.logger.info(f"✅ AUTO-REPAIR: Added 'meter_number' to rooms")
+                    # 3. Add permissions to users specifically
+                    if table == 'users' and 'permissions' not in columns:
+                        # For SQLite, we add as TEXT (handling JSON), for others JSON
+                        col_type = "JSON" if engine.name != 'sqlite' else "TEXT"
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN permissions {col_type}"))
+                        conn.commit()
+                        app.logger.info(f"✅ AUTO-REPAIR: Added 'permissions' to users")
                 except Exception as e:
                     app.logger.warning(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
                     try: conn.rollback()
@@ -153,19 +160,37 @@ def create_app():
                         except: pass
 
             from backend.models import User
+            import json
+            
+            # Default permissions for Super Admins
+            full_perms = {
+                "dashboard": True, "wizard": True, "tenants": True, "rooms": True,
+                "bulk_rent": True, "police": True, "tasks": True, "electricity": True,
+                "finance": True, "maintenance": True, "cctv": True, "reports": True,
+                "audit": True, "settings": True
+            }
+
             if not User.query.filter_by(username='admin').first():
-                u = User(username='admin', role='Owner')
+                u = User(username='admin', role='Owner', permissions=full_perms)
                 u.set_password('admin123')
                 db.session.add(u)
                 db.session.commit()
                 print("🚀 AUTO-SEED: Admin User (admin/admin123) Created.")
                 
             if not User.query.filter_by(username='ewardjain@gmail.com').first():
-                o = User(username='ewardjain@gmail.com', role='Owner')
+                o = User(username='ewardjain@gmail.com', role='Owner', permissions=full_perms)
                 o.set_password('Coolsun@23*+')
                 db.session.add(o)
                 db.session.commit()
                 print("🚀 AUTO-SEED: Owner User (ewardjain@gmail.com) Created.")
+            
+            # Update existing admins who might not have permissions set yet
+            admins = User.query.filter(User.role == 'Owner', User.permissions == None).all()
+            for admin in admins:
+                admin.permissions = full_perms
+            if admins:
+                db.session.commit()
+                print(f"✅ Repaired permissions for {len(admins)} super users.")
     except Exception as e:
         # We don't rollback here because if it fails due to a lock, another worker might have done it
         app.logger.warning(f"Auto-seed skipped/failed (likely concurrent startup): {e}")
@@ -183,6 +208,7 @@ def create_app():
     from backend.routes.finance import finance_bp
     from backend.routes.admin import admin_bp
     from backend.routes.auth import auth_bp
+    from backend.routes.users import users_bp
 
     app.register_blueprint(onboarding_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api')
@@ -196,6 +222,7 @@ def create_app():
     app.register_blueprint(finance_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')
+    app.register_blueprint(users_bp, url_prefix='/api')
 
     # ─── Debug / Schema Recovery Endpoint ──────────────────────────────────────
     @app.route('/api/debug/inspect-db')
