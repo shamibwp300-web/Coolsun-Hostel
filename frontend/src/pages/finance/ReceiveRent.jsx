@@ -371,6 +371,8 @@ const ReceiveRent = () => {
                                                 ))}
                                             </div>
                                         </>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </motion.div>
