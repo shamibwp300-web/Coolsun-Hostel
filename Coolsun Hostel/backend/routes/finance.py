@@ -309,6 +309,102 @@ def get_room_ledger(room_id):
         "tenants": res_tenants
     }), 200
 
+@finance_bp.route('/finance/room-summary/<room_num>', methods=['GET'])
+def get_room_summary(room_num):
+    from backend.models import Room
+    room = Room.query.filter_by(number=room_num, deleted_at=None).first_or_404()
+    tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
+    
+    res_primary = []
+    res_subs = []
+    total_room_pending = 0
+    
+    for t in tenants:
+        # Balance calculation logic
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+
+        for ledger in t.transactions:
+            if ledger.deleted_at is None:
+                amt = float(ledger.amount)
+                ltype = ledger.type
+                if ltype in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ltype] += amt
+                        due_by_type[ltype] += amt
+                    else:
+                        due_by_type[ltype] += amt
+
+        tenant_balance = sum(max(0, due_by_type[k] - paid_by_type[k]) for k in due_by_type)
+        total_room_pending += tenant_balance
+        
+        tenant_data = {
+            "id": t.id,
+            "name": t.name,
+            "bed": t.bed_label or "N/A",
+            "phone": t.phone,
+            "balance": tenant_balance
+        }
+        
+        if not t.parent_tenant_id:
+            res_primary.append(tenant_data)
+        else:
+            res_subs.append(tenant_data)
+            
+    return jsonify({
+        "room_number": room.number,
+        "total_pending": total_room_pending,
+        "primary": res_primary,
+        "sub_tenants": res_subs
+    }), 200
+
+@finance_bp.route('/finance/hostel-summary', methods=['GET'])
+def get_hostel_summary():
+    from backend.models import Room
+    rooms = Room.query.filter_by(deleted_at=None).all()
+    res = []
+    
+    for room in rooms:
+        tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
+        if not tenants:
+            continue
+            
+        total_pending = 0
+        primary_name = "No Primary"
+        
+        for t in tenants:
+            due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+            paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+            for ledger in t.transactions:
+                if ledger.deleted_at is None:
+                    amt = float(ledger.amount)
+                    if ledger.type in due_by_type:
+                        if ledger.status == 'PAID':
+                            paid_by_type[ledger.type] += amt
+                            due_by_type[ledger.type] += amt
+                        else:
+                            due_by_type[ledger.type] += amt
+            
+            tenant_balance = sum(max(0, due_by_type[k] - paid_by_type[k]) for k in due_by_type)
+            total_pending += tenant_balance
+            
+            if not t.parent_tenant_id:
+                primary_name = t.name
+        
+        # If no explicit primary, use the first tenant's name
+        if primary_name == "No Primary" and tenants:
+            primary_name = tenants[0].name
+
+        res.append({
+            "room_number": room.number,
+            "primary_name": primary_name,
+            "total_pending": total_pending
+        })
+    
+    # Sort by room number
+    res.sort(key=lambda x: x['room_number'])
+    return jsonify(res), 200
+
 @finance_bp.route('/finance/opening-balance', methods=['POST'])
 def add_opening_balance():
     data = request.json

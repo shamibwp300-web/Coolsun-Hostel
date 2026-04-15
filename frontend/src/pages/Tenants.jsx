@@ -146,6 +146,17 @@ const Tenants = () => {
         }
     };
 
+    const handlePromote = async (tenant) => {
+        if (!window.confirm(`Promote ${tenant.name} to Primary Resident? This will give them their own billing account.`)) return;
+        try {
+            await axios.post(`/api/tenants/${tenant.id}/promote`);
+            alert(`✅ ${tenant.name} is now a Primary Resident!`);
+            fetchTenants();
+        } catch (err) {
+            alert(err.response?.data?.error || "Promotion failed");
+        }
+    };
+
     const handleCsvUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -579,6 +590,15 @@ const Tenants = () => {
                                         >
                                             <LogOut size={18} />
                                         </button>
+                                        {tenant.parent_tenant_id && (
+                                            <button
+                                                title="Promote to Primary"
+                                                onClick={() => handlePromote(tenant)}
+                                                className="p-2 rounded-lg hover:bg-blue-600/20 text-blue-400 transition-colors animate-pulse"
+                                            >
+                                                <Users size={18} />
+                                            </button>
+                                        )}
                                         <button
                                             title="Archive"
                                             onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: tenant.id, name: tenant.name }); }}

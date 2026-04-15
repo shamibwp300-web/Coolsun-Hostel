@@ -251,3 +251,30 @@ def import_tenants():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Failed to parse CSV: {str(e)}"}), 500
+@tenants_bp.route('/tenants/<int:id>/promote', methods=['POST'])
+def promote_tenant(id):
+    from backend.models import BillingProfile, Room
+    tenant = Tenant.query_active().filter_by(id=id).first_or_404()
+    
+    if not tenant.parent_tenant_id:
+        return jsonify({"message": "Tenant is already a primary resident"}), 400
+        
+    # Remove parent link
+    tenant.parent_tenant_id = None
+    
+    # Ensure they have a billing profile
+    if not tenant.billing_profile:
+        # Fetch room base rent for default
+        room = Room.query.get(tenant.room_id)
+        default_rent = (room.base_rent / room.capacity) if (room and room.capacity > 0) else 10000
+        
+        profile = BillingProfile(
+            tenant_id=tenant.id,
+            rent_amount=default_rent,
+            security_deposit=0, # Assuming they already paid or it's handled
+            due_day=1
+        )
+        db.session.add(profile)
+        
+    db.session.commit()
+    return jsonify({"message": f"Successfully promoted {tenant.name} to Primary Resident"}), 200

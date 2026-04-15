@@ -25,6 +25,9 @@ const ReceiveRent = () => {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paying, setPaying] = useState(false);
   const [success, setSuccess] = useState(null);
+  const [viewMode, setViewMode] = useState('single'); // 'single' or 'whole'
+  const [hostelSummary, setHostelSummary] = useState([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   // Fetch Room Summary
   const fetchRoomRecord = async (num = searchQuery) => {
@@ -43,6 +46,25 @@ const ReceiveRent = () => {
       setLoading(false);
     }
   };
+
+  const fetchHostelSummary = async () => {
+    setSummaryLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get('/api/finance/hostel-summary');
+      setHostelSummary(res.data);
+    } catch (err) {
+      setError("Failed to fetch hostel summary.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'whole') {
+      fetchHostelSummary();
+    }
+  }, [viewMode]);
 
   const handleCollectTotal = async () => {
     if (!roomData) return;
@@ -114,8 +136,14 @@ const ReceiveRent = () => {
       {/* Mode Selector & Search */}
       <div className="flex flex-col md:flex-row gap-4 items-center">
         <div className="glass-card p-1 flex space-x-1 shrink-0">
-           <button className="px-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-lg">SINGLE ROOM</button>
-           <button className="px-6 py-3 rounded-xl text-white/40 font-bold text-sm hover:text-white transition-colors">WHOLE HOSTEL</button>
+           <button 
+             onClick={() => setViewMode('single')}
+             className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${viewMode === 'single' ? 'bg-blue-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+           >SINGLE ROOM</button>
+           <button 
+             onClick={() => setViewMode('whole')}
+             className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${viewMode === 'whole' ? 'bg-blue-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+           >WHOLE HOSTEL</button>
         </div>
         
         <div className="flex-1 w-full relative">
@@ -141,7 +169,78 @@ const ReceiveRent = () => {
       </div>
 
       <AnimatePresence mode="wait">
-        {roomData ? (
+        {viewMode === 'whole' ? (
+          <motion.div
+            key="whole-hostel"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card border-white/10 overflow-hidden"
+          >
+            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+              <h3 className="text-lg font-bold text-white flex items-center">
+                <Users className="mr-3 text-blue-400" size={20} /> Hostel Financial Oversight
+              </h3>
+              <button 
+                onClick={fetchHostelSummary}
+                className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center"
+              >
+                {summaryLoading ? <Loader2 className="animate-spin mr-2" size={14} /> : <span className="mr-2">↻</span>}
+                Refresh Summary
+              </button>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-black/40">
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/30 border-b border-white/5">Room</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/30 border-b border-white/5">Account Holder (Primary)</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 text-right">Pending Balance</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/30 border-b border-white/5 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {summaryLoading ? (
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-white/20 animate-pulse">Syncing hostel accounts...</td></tr>
+                  ) : hostelSummary.length === 0 ? (
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-white/20">No active rooms found.</td></tr>
+                  ) : (
+                    hostelSummary.map(room => (
+                      <tr key={room.room_number} className="hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-6 py-4 text-white font-mono font-bold text-lg">#{room.room_number}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="h-8 w-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-xs mr-3">
+                              {room.primary_name[0]}
+                            </div>
+                            <span className="text-white/80 font-medium">{room.primary_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <span className={`font-mono font-bold text-lg ${room.total_pending > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                            Rs. {room.total_pending.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button 
+                            onClick={() => {
+                              setViewMode('single');
+                              setSearchQuery(room.room_number);
+                              fetchRoomRecord(room.room_number);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-white/5 text-white/40 hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest group-hover:scale-110"
+                          >
+                            DETAILS
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        ) : roomData ? (
           <motion.div 
             key="result"
             initial={{ opacity: 0, y: 20 }}

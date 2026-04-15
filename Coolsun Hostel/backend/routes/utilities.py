@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from backend.models import db, Room, MeterReading, Ledger, WaterBill, InternetBill, SystemSetting
+from backend.models import db, Room, MeterReading, Ledger, WaterBill, InternetBill
 from datetime import datetime
 
 utilities_bp = Blueprint('utilities', __name__)

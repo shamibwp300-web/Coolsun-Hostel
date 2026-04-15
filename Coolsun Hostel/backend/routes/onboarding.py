@@ -128,10 +128,18 @@ def create_tenant():
         if rent_pending > 0:
             db.session.add(Ledger(tenant_id=tenant.id, amount=rent_pending, type=ledger_rent_type, status='PENDING', description=f'Initial {tenant.tenancy_type} Rent Arrears'))
 
+        # Security Responsibility Logic
+        security_managed_by = data.get('security_managed_by', 'Individual') # Default to Individual
+
         if amount_for_security > 0:
             db.session.add(Ledger(tenant_id=tenant.id, amount=amount_for_security, type='DEPOSIT', status='PAID', payment_method=p_method, description='Security Deposit (Paid)'))
-        if security_pending > 0:
+        
+        # Only create a PENDING security entry if it's managed individually
+        if security_pending > 0 and security_managed_by == 'Individual':
             db.session.add(Ledger(tenant_id=tenant.id, amount=security_pending, type='DEPOSIT', status='PENDING', description='Security Deposit Arrears'))
+        elif security_managed_by == 'Primary':
+            # Optionally log that it's covered by primary, or just skip it
+            pass
 
         # File Attachments
         doc_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'documents')

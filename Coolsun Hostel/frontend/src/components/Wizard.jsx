@@ -93,6 +93,7 @@ const Wizard = () => {
     is_partial_payment: false,
     payment_method: 'Cash',
     parent_tenant_id: '', // NEW: Track main tenancy holder
+    security_managed_by: 'Individual', // NEW: 'Individual' or 'Primary'
     billingMode: 'pro-rata', // 'full', 'pro-rata', or 'private'
     baseRent: 0, // Store original room rent
     roomTotalRent: 0, // Store full room rent
@@ -147,9 +148,9 @@ const Wizard = () => {
         roomNumber: room.number, 
         baseRent: perHeadRent,
         roomTotalRent: room.base_rent,
-        rent: initialRent, 
+        rent: formData.parentTenantId ? 0 : initialRent, 
         tenancyType: 'Shared',
-        parentTenantId: '' 
+        parentTenantId: formData.parentTenantId || '' 
     });
     fetchRoomTenants(room.id);
     nextStep();
@@ -182,10 +183,10 @@ const Wizard = () => {
     
     setFormData(prev => ({ 
       ...prev, 
-      rent: breakdown.total,
+      rent: (formData.parentTenantId && formData.parentTenantId !== 'select') ? 0 : breakdown.total,
       tenancyType: formData.billingMode === 'private' ? 'Private' : 'Shared'
     }));
-  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent]);
+  }, [formData.billingMode, formData.moveInDate, formData.baseRent, formData.roomTotalRent, formData.parentTenantId]);
 
   const canProceedBilling = () => {
     if (currentStep !== 3) return true;
@@ -226,6 +227,7 @@ const Wizard = () => {
     data.append('payment_method', formData.payment_method);
     data.append('due_day', formData.dueDay);
     if (formData.parentTenantId) data.append('parent_tenant_id', formData.parentTenantId);
+    data.append('security_managed_by', formData.security_managed_by);
 
     // Append Files
     if (formData.files.id_front) data.append('id_front', formData.files.id_front);
@@ -648,15 +650,38 @@ const Wizard = () => {
 
             {/* Manual Overrides & Security */}
             <div className="space-y-4">
-               <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-blue-400 mb-2 block">Security Deposit (Separate Field)</label>
-                  <input
-                    type="number"
-                    value={formData.securityDeposit}
-                    onChange={(e) => setFormData({ ...formData, securityDeposit: e.target.value })}
-                    className="glass-input h-14 w-full px-4 rounded-xl text-white bg-white/5 font-mono text-lg border-blue-500/30 focus:border-blue-500"
-                    placeholder="5000"
-                  />
+               <div className="space-y-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold uppercase tracking-wider text-blue-400">Security Deposit</label>
+                    <div className="flex bg-black/40 p-1 rounded-lg border border-white/10">
+                      <button 
+                        onClick={() => setFormData({ ...formData, security_managed_by: 'Individual' })}
+                        className={`px-2 py-1 text-[9px] font-bold rounded transition-all ${formData.security_managed_by === 'Individual' ? 'bg-blue-600 text-white' : 'text-white/40 hover:text-white'}`}
+                      >PAID INDIVIDUALLY</button>
+                      <button 
+                        onClick={() => setFormData({ ...formData, security_managed_by: 'Primary' })}
+                        className={`px-2 py-1 text-[9px] font-bold rounded transition-all ${formData.security_managed_by === 'Primary' ? 'bg-yellow-600 text-white' : 'text-white/40 hover:text-white'}`}
+                      >COVERED BY PRIMARY</button>
+                    </div>
+                  </div>
+                  
+                  {formData.security_managed_by === 'Individual' ? (
+                    <input
+                      type="number"
+                      value={formData.securityDeposit}
+                      onChange={(e) => setFormData({ ...formData, securityDeposit: e.target.value })}
+                      className="glass-input h-14 w-full px-4 rounded-xl text-white bg-white/5 font-mono text-lg border-blue-500/30 focus:border-blue-500"
+                      placeholder="5000"
+                    />
+                  ) : (
+                    <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center">
+                      <Shield className="text-yellow-500 mr-3" size={20} />
+                      <div>
+                        <p className="text-sm font-bold text-yellow-400">Linked to Primary Security</p>
+                        <p className="text-[10px] text-white/50 mt-0.5">No separate security ledger will be created for this tenant.</p>
+                      </div>
+                    </div>
+                  )}
                </div>
 
                <div>
