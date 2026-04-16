@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request
 from backend.models import db, Tenant, Room, Ledger, Document
 
 tenants_bp = Blueprint('tenants', __name__)
@@ -40,7 +40,7 @@ def get_tenants():
         # But wait! The prompt explicitly said:
         # "Fix Pending Balance math: (Current Rent + Security Due) - (Rent Paid + Security Paid)."
         
-        # Initial trackers for all types
+        # Breakdown calculation logic including all types
         due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
         paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
 
@@ -48,15 +48,12 @@ def get_tenants():
             if ledger.deleted_at is None:
                 amt = float(ledger.amount)
                 ltype = ledger.type
-                print(f"DEBUG: Tenant {t.name}, Ledger Type: {ltype}, Amount: {amt}, Status: {ledger.status}")
-                if ltype not in due_by_type:
-                    continue
-                    
-                if ledger.status == 'PAID':
-                    paid_by_type[ltype] += amt
-                    due_by_type[ltype] += amt
-                else:
-                    due_by_type[ltype] += amt
+                if ltype in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ltype] += amt
+                        due_by_type[ltype] += amt
+                    else:
+                        due_by_type[ltype] += amt
 
         # Breakdown for frontend
         rent_balance = max(0, (due_by_type['RENT'] + due_by_type['PRIVATE_RENT']) - (paid_by_type['RENT'] + paid_by_type['PRIVATE_RENT']))
@@ -101,17 +98,23 @@ def get_tenants():
             "police_form_url": t.police_form_url or getattr(Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
             "agreement_url": t.agreement_url or getattr(Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).order_by(Document.id.desc()).first(), 'url', None),
             "parent_tenant_id": t.parent_tenant_id,
+            "tenancy_type": t.tenancy_type or 'Shared',
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
-            "is_archived": t.deleted_at is not None
+            "is_archived": t.deleted_at is not None,
+            "rent_start_date": t.agreement_start_date.strftime('%Y-%m-%d') if t.agreement_start_date else ""
         })
     return jsonify(result), 200
 
 @tenants_bp.route('/tenants/<int:id>', methods=['PUT'])
 def update_tenant(id):
-    from datetime import datetime
-    tenant = Tenant.query_active().filter_by(id=id).first_or_404()
-    data = request.json
+    # Retrieve tenant either active or archived
+    tenant = Tenant.query.get_or_404(id)
     
+    # Standardize data access for both JSON and Form (Multipart)
+    data = request.form if request.form else request.get_json()
+    if not data:
+        data = {}
+        
     tenant.name = data.get('name', tenant.name)
     tenant.phone = data.get('phone', tenant.phone)
     tenant.cnic = data.get('cnic', tenant.cnic)
@@ -120,26 +123,26 @@ def update_tenant(id):
     tenant.emergency_contact = data.get('emergency_contact', tenant.emergency_contact)
     tenant.police_station = data.get('police_station', tenant.police_station)
     
-    # Handle dates
-    if data.get('agreement_start_date'):
-        try:
-            tenant.agreement_start_date = datetime.strptime(data.get('agreement_start_date'), '%Y-%m-%d').date()
-        except ValueError:
-            pass # Keep existing or None on format error
-            
-    if data.get('actual_move_in_date'):
-        try:
-            tenant.actual_move_in_date = datetime.strptime(data.get('actual_move_in_date'), '%Y-%m-%d').date()
-        except ValueError:
-            pass
-
     # Accept either 'bed_label' (new) or 'bed' (legacy frontend key)
     bed_val = data.get('bed_label') or data.get('bed')
     if bed_val is not None:
         tenant.bed_label = bed_val
     
+    if 'rent_start_date' in data and data.get('rent_start_date'):
+        try:
+            from datetime import datetime
+            tenant.agreement_start_date = datetime.strptime(data.get('rent_start_date'), '%Y-%m-%d').date()
+        except:
+            pass
+    
+    if 'internet_opt_in' in data:
+        val = data.get('internet_opt_in')
+        tenant.internet_opt_in = str(val).lower() == 'true'
+        
     # 🛡️ Handle Multiple Document Uploads (ID Front, ID Back, Police Form, Agreement)
     import os
+    from datetime import datetime
+    from flask import current_app
     doc_dir = current_app.config['UPLOAD_FOLDER']
     os.makedirs(doc_dir, exist_ok=True)
     
@@ -160,18 +163,30 @@ def update_tenant(id):
                 fname = f"tenant_{tenant.id}_{field}_{ts}{ext}"
                 fpath = os.path.join(doc_dir, fname)
                 file.save(fpath)
-                setattr(tenant, attr, f"/static/uploads/documents/{fname}")
+                
+                # Standardize to /api/docs/ for frontend access (matches onboarding.py)
+                db_url = f"/api/docs/{fname}"
+                setattr(tenant, attr, db_url)
+                
+                # Also maintain Document table for backward compatibility
+                doc_type_map = {
+                    'id_front': 'ID_Front',
+                    'id_back': 'ID_Back',
+                    'police_form': 'Police_Form',
+                    'agreement': 'Agreement'
+                }
+                new_doc = Document(tenant_id=tenant.id, type=doc_type_map[field], url=db_url)
+                db.session.add(new_doc)
+                
                 if field == 'police_form':
                     tenant.police_form_submitted = datetime.utcnow()
 
     if 'tenancy_type' in data:
         tenant.tenancy_type = data.get('tenancy_type')
-    if 'internet_opt_in' in data:
-        tenant.internet_opt_in = bool(data.get('internet_opt_in'))
         
     if 'parent_tenant_id' in data:
         pt_id = data.get('parent_tenant_id')
-        tenant.parent_tenant_id = None if pt_id == '' or pt_id is None else int(pt_id)
+        tenant.parent_tenant_id = None if pt_id in ['', 'null', 'select', None] else int(pt_id)
         
     if tenant.billing_profile:
         if 'rent_amount' in data:
@@ -180,14 +195,32 @@ def update_tenant(id):
             tenant.billing_profile.security_deposit = data.get('security_deposit')
         
     db.session.commit()
-    return jsonify({"message": "Successfully updated tenant"}), 200
+    return jsonify({
+        "message": "Successfully updated tenant",
+        "tenant": {
+            "id": tenant.id,
+            "name": tenant.name,
+            "agreement_url": tenant.agreement_url
+        }
+    }), 200
 
 @tenants_bp.route('/tenants/<int:id>', methods=['DELETE'])
 def delete_tenant(id):
-    tenant = Tenant.query_active().filter_by(id=id).first_or_404()
-    tenant.delete() # Uses SoftDeleteMixin
-    db.session.commit()
-    return jsonify({"message": "Successfully archived tenant"}), 200
+    try:
+        # Retrieve tenant regardless of active status to see if they exist
+        tenant = Tenant.query.get(id)
+        if not tenant:
+            return jsonify({"error": "Tenant not found in database"}), 404
+            
+        if tenant.deleted_at:
+            return jsonify({"error": f"Tenant {tenant.name} is already archived"}), 400
+            
+        tenant.delete() # Uses SoftDeleteMixin
+        db.session.commit()
+        return jsonify({"message": f"Successfully archived {tenant.name}"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Internal database error: {str(e)}"}), 500
 
 @tenants_bp.route('/tenants/<int:id>/restore', methods=['PUT'])
 def restore_tenant(id):
@@ -195,6 +228,33 @@ def restore_tenant(id):
     tenant.deleted_at = None
     db.session.commit()
     return jsonify({"message": "Successfully restored tenant"}), 200
+
+@tenants_bp.route('/tenants/<int:id>/permanent', methods=['DELETE'])
+def permanently_delete_tenant(id):
+    """Permanently delete an already-archived tenant and all their linked data."""
+    try:
+        tenant = Tenant.query.get(id)
+        if not tenant:
+            return jsonify({"error": "Tenant not found"}), 404
+        if not tenant.deleted_at:
+            return jsonify({"error": "Tenant must be archived first before permanent deletion"}), 400
+        
+        tenant_name = tenant.name
+        tenant_id = tenant.id
+
+        # Delete ALL linked records first to avoid FK constraint errors
+        from backend.models import Ledger, Document, BillingProfile, MoveOutRecord
+        Ledger.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+        Document.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+        BillingProfile.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+        MoveOutRecord.query.filter_by(tenant_id=tenant_id).delete(synchronize_session=False)
+
+        db.session.delete(tenant)
+        db.session.commit()
+        return jsonify({"message": f"Tenant '{tenant_name}' permanently deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Permanent delete failed: {str(e)}"}), 500
 
 import csv
 from io import StringIO
@@ -251,30 +311,3 @@ def import_tenants():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Failed to parse CSV: {str(e)}"}), 500
-@tenants_bp.route('/tenants/<int:id>/promote', methods=['POST'])
-def promote_tenant(id):
-    from backend.models import BillingProfile, Room
-    tenant = Tenant.query_active().filter_by(id=id).first_or_404()
-    
-    if not tenant.parent_tenant_id:
-        return jsonify({"message": "Tenant is already a primary resident"}), 400
-        
-    # Remove parent link
-    tenant.parent_tenant_id = None
-    
-    # Ensure they have a billing profile
-    if not tenant.billing_profile:
-        # Fetch room base rent for default
-        room = Room.query.get(tenant.room_id)
-        default_rent = (room.base_rent / room.capacity) if (room and room.capacity > 0) else 10000
-        
-        profile = BillingProfile(
-            tenant_id=tenant.id,
-            rent_amount=default_rent,
-            security_deposit=0, # Assuming they already paid or it's handled
-            due_day=1
-        )
-        db.session.add(profile)
-        
-    db.session.commit()
-    return jsonify({"message": f"Successfully promoted {tenant.name} to Primary Resident"}), 200
