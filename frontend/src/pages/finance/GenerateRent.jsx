@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   PlusCircle, 
@@ -14,11 +14,40 @@ import {
 import axios from 'axios';
 
 const GenerateRent = () => {
+  const now = new Date();
   const [mode, setMode] = useState('hostel'); // 'hostel' or 'room'
   const [roomNumber, setRoomNumber] = useState('');
+  const [targetMonth, setTargetMonth] = useState(now.getMonth() + 1); // 1-12
+  const [targetYear, setTargetYear] = useState(now.getFullYear());
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [roomStatus, setRoomStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  const fetchRoomStatus = async () => {
+    if (!roomNumber) return;
+    setStatusLoading(true);
+    try {
+      const res = await axios.get(`/api/finance/room-billing-status/${roomNumber}`, {
+        params: { month: targetMonth, year: targetYear }
+      });
+      setRoomStatus(res.data);
+    } catch (err) {
+      console.error("Failed to fetch room status");
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mode === 'room' && roomNumber) {
+      const timer = setTimeout(fetchRoomStatus, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setRoomStatus(null);
+    }
+  }, [roomNumber, targetMonth, targetYear, mode]);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -26,7 +55,11 @@ const GenerateRent = () => {
     setResult(null);
     
     try {
-      const payload = mode === 'room' ? { room_number: roomNumber } : {};
+      const payload = {
+        month: targetMonth,
+        year: targetYear,
+        ...(mode === 'room' && { room_number: roomNumber })
+      };
       const res = await axios.post('/api/finance/generate-rent', payload);
       setResult(res.data.message);
     } catch (err) {
@@ -46,9 +79,31 @@ const GenerateRent = () => {
           </h1>
           <p className="text-white/40 mt-1 font-medium italic">Automated monthly billing for rooms and bulk agreements</p>
         </div>
-        <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
-          <p className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold">Billing Cycle</p>
-          <p className="text-sm text-blue-400 font-bold">{new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
+        <div className="flex gap-4">
+          <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
+            <p className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold mb-1">Billing Month</p>
+            <select 
+              value={targetMonth}
+              onChange={(e) => setTargetMonth(parseInt(e.target.value))}
+              className="bg-transparent text-blue-400 font-bold text-sm outline-none cursor-pointer"
+            >
+              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => (
+                <option key={m} value={i + 1} className="bg-[#0f1117] text-white">{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
+            <p className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold mb-1">Billing Year</p>
+            <select 
+              value={targetYear}
+              onChange={(e) => setTargetYear(parseInt(e.target.value))}
+              className="bg-transparent text-blue-400 font-bold text-sm outline-none cursor-pointer"
+            >
+              {[2024, 2025, 2026, 2027].map(y => (
+                <option key={y} value={y} className="bg-[#0f1117] text-white">{y}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -111,6 +166,37 @@ const GenerateRent = () => {
                   </p>
                 </div>
               </div>
+
+              {mode === 'room' && roomStatus && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="grid grid-cols-2 gap-4"
+                >
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Total Arrears (Room)</p>
+                    <p className={`text-xl font-mono font-black mt-1 ${roomStatus.total_pending > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      Rs. {roomStatus.total_pending.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Selected Cycle Status</p>
+                    <div className="flex items-center mt-1">
+                      {roomStatus.cycle_billed ? (
+                        <>
+                          <CheckCircle2 className="text-green-500 mr-2" size={16} />
+                          <span className="text-xs font-bold text-green-500 uppercase">Already Billed</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="text-orange-400 mr-2" size={16} />
+                          <span className="text-xs font-bold text-orange-400 uppercase">Not Logged</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               <div className="pt-4">
                 <button 
@@ -184,8 +270,8 @@ const GenerateRent = () => {
                   <div className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
                 </div>
                 <p className="text-xs text-white/50 leading-relaxed font-medium">
-                  <span className="text-white block font-bold mb-0.5 uppercase tracking-tighter">Sub-Tenants Check</span>
-                  Sub-tenants with Rs. 0 rent in their profile are automatically excluded from the generation cycle.
+                   <span className="text-white block font-bold mb-0.5 uppercase tracking-tighter">Sub-Tenants Check</span>
+                   Sub-tenants with Rs. 0 rent in their profile are automatically excluded from the generation cycle.
                 </p>
               </li>
             </ul>

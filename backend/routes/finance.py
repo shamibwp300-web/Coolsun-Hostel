@@ -89,14 +89,14 @@ def pay_dues():
 def handle_expenses():
     if request.method == 'POST':
         data = request.json
-        # Robust date parsing
-        exp_date = date.today()
-        if 'date' in data:
+        exp_date = None
+        if data.get('date'):
             try:
-                dstr = data.get('date').split('T')[0]
-                exp_date = datetime.strptime(dstr, '%Y-%m-%d').date()
+                exp_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
             except:
-                pass
+                exp_date = date.today()
+        else:
+            exp_date = date.today()
 
         e = Expense(
             category=data.get('category', 'Operational'),
@@ -112,37 +112,10 @@ def handle_expenses():
         db.session.commit()
         return jsonify({"message": "Expense logged"}), 201
         
-    # GET logic with filtering
-    query = Expense.query.filter_by(deleted_at=None)
-    
-    # Filter by date range
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    if start_date:
-        try:
-            query = query.filter(Expense.date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-        except: pass
-    if end_date:
-        try:
-            query = query.filter(Expense.date <= datetime.strptime(end_date, '%Y-%m-%d').date())
-        except: pass
-        
-    # Filter by type (Business/Personal)
-    etype = request.args.get('type')
-    if etype == 'Business':
-        query = query.filter(Expense.category != 'Owner Personal')
-    elif etype == 'Personal':
-        query = query.filter(Expense.category == 'Owner Personal')
-        
-    # Filter by search (description)
-    search = request.args.get('search')
-    if search:
-        query = query.filter(Expense.description.ilike(f'%{search}%'))
-        
-    expenses = query.order_by(Expense.date.desc(), Expense.id.desc()).all()
-    
+    expenses = Expense.query.filter_by(deleted_at=None).order_by(Expense.date.desc(), Expense.id.desc()).limit(50).all()
     res = []
     for exp in expenses:
+        # Front-end expects generic "Business" vs "Personal" as `type`
         btype = "Personal" if exp.category == 'Owner Personal' else "Business"
         res.append({
             "id": exp.id,
@@ -150,8 +123,7 @@ def handle_expenses():
             "amount": float(exp.amount),
             "description": exp.description,
             "note": exp.sub_note or "",
-            "date": exp.date.strftime('%Y-%m-%d') if exp.date else "N/A", # Return ISO format for easier FE handling
-            "display_date": exp.date.strftime('%b %d, %Y') if exp.date else "N/A",
+            "date": exp.date.strftime('%b %d, %Y') if exp.date else "N/A",
             "type": btype
         })
     return jsonify(res), 200
@@ -161,24 +133,20 @@ def manage_expense(expense_id):
     expense = Expense.query.get_or_404(expense_id)
     
     if request.method == 'DELETE':
-        expense.delete() # Soft delete helper from models
+        expense.deleted_at = datetime.utcnow()
         db.session.commit()
         return jsonify({"message": "Expense deleted"}), 200
         
     if request.method == 'PUT':
         data = request.json
-        if 'amount' in data:
-            expense.amount = data.get('amount')
-        if 'description' in data:
-            expense.description = data.get('description')
-        if 'category' in data:
-            expense.category = data.get('category')
-        if 'sub_note' in data:
-            expense.sub_note = data.get('sub_note')
-        if 'date' in data:
+        expense.category = data.get('category', expense.category)
+        expense.amount = data.get('amount', expense.amount)
+        expense.description = data.get('description', expense.description)
+        expense.sub_note = data.get('sub_note', expense.sub_note)
+        
+        dstr = data.get('date')
+        if dstr:
             try:
-                # Handle ISO date or simple YYYY-MM-DD
-                dstr = data.get('date').split('T')[0]
                 expense.date = datetime.strptime(dstr, '%Y-%m-%d').date()
             except:
                 pass
@@ -193,236 +161,275 @@ def manage_expense(expense_id):
 
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
-    from backend.models import Floor
+    from backend.models import Floor, Room
+    import calendar
     data = request.json or {}
+    room_id = data.get('room_id')
     room_number = data.get('room_number')
     
-    # Use current local time for billing period or provided month
-    now = datetime.now()
-    billing_month_str = data.get('billing_month')
+    # Resolve room_id if room_number is provided
+    if not room_id and room_number:
+        room_obj = Room.query.filter_by(number=str(room_number), deleted_at=None).first()
+        if room_obj:
+            room_id = room_obj.id
     
-    if billing_month_str:
-        try:
-            target_date = datetime.strptime(billing_month_str, '%Y-%m')
-            current_month_str = billing_month_str
-            display_month = target_date.strftime('%B %Y')
-            timestamp = target_date
-        except:
-            current_month_str = now.strftime('%Y-%m')
-            display_month = now.strftime('%B %Y')
-            timestamp = now
-    else:
-        current_month_str = now.strftime('%Y-%m')
-        display_month = now.strftime('%B %Y')
-        timestamp = now
-        
+    # Cycle Selection logic
+    now = datetime.utcnow()
+    month = int(data.get('month', now.month))
+    year = int(data.get('year', now.year))
+    
+    current_month_str = f"{year}-{month:02d}"
+    month_label = f"{calendar.month_name[month]} {year}"
+    
     generated = 0
     
     # 1. Generate Rent for Bulk Rented Floors
-    # We do this if no room_number is provided, OR if the room_number provided belongs to a bulk-rented floor
-    valid_bulk_rooms = []
-    if room_number:
-        from backend.models import Room
-        clean_num = str(room_number).strip()
-        room_obj = Room.query.filter_by(number=clean_num, deleted_at=None).first()
-        if room_obj and room_obj.is_bulk_rented and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
-            # The specifically targeted room is part of a bulk agreement
-            bulk_floors = [room_obj.floor_ref]
-            valid_bulk_rooms = [r.number for r in room_obj.floor_ref.rooms if r.is_bulk_rented and r.deleted_at is None]
-        else:
-            bulk_floors = []
-    else:
+    if not room_id:
         bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
-
-    bulk_processed_log = []
-    for f in bulk_floors:
-        if not f.bulk_tenant_id:
-            continue
-            
-        floor_description = f"Bulk Floor Rent ({f.name}) - {display_month}"
-        
-        # Check if already billed for this FLOOR specifically in this month
-        existing = Ledger.query.filter(
-            Ledger.tenant_id == f.bulk_tenant_id, 
-            Ledger.type == 'RENT', 
-            Ledger.deleted_at == None,
-            Ledger.description.contains(f"({f.name})")
-        ).all()
-        
-        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
-        
-        if not already_billed:
-            l = Ledger(
-                tenant_id=f.bulk_tenant_id,
-                amount=f.bulk_rent_amount or 0,
-                type='RENT',
-                status='PENDING',
-                description=floor_description,
-                timestamp=timestamp
-            )
-            db.session.add(l)
-            generated += 1
-            bulk_processed_log.append(f.name)
-        elif room_number:
-            # Special message if explicitly requested but already done
-            return jsonify({"message": f"Bulk Rental for {f.name} (Rooms {', '.join(valid_bulk_rooms)}) was already generated for {display_month}."}), 200
-
-    # If we targeted a bulk room and processed it, we can stop early or skip individual checks
-    if room_number and valid_bulk_rooms:
-        db.session.commit()
-        return jsonify({
-            "message": f"Successfully generated Bulk Billing for {bulk_processed_log[0] if bulk_processed_log else 'Floor'} (Group: {', '.join(valid_bulk_rooms)}) for {display_month}.",
-            "generated_items": generated
-        }), 200
-
-    # 2. Generate Rent for Regular Tenants
-    query = Tenant.query.filter_by(deleted_at=None)
-    if room_number:
-        from backend.models import Room
-        # Use exact number but try to handle common issues like leading/trailing space in request
-        clean_num = str(room_number).strip()
-        room_obj = Room.query.filter_by(number=clean_num, deleted_at=None).first()
-        if room_obj:
-            query = query.filter_by(room_id=room_obj.id)
-        else:
-            return jsonify({"error": f"Active Room {room_number} not found"}), 404
-            
-    tenants = query.all()
-    
-    # Diagnosis: If targeting a specific room and no tenants found, maybe room_id mismatch?
-    if room_number and not tenants:
-        app.logger.warning(f"No active tenants found for room number {room_number} (ID {room_obj.id if room_obj else '??'})")
-
-    for t in tenants:
-        # CRITICAL: If a room or its floor is bulk rented, skip individual billing
-        if t.room and (t.room.is_bulk_rented or (t.room.floor_ref and t.room.floor_ref.is_bulk_rented)):
-            continue
-            
-        # Determine rent amount
-        rent_amount = 0
-        if t.billing_profile and t.billing_profile.rent_amount is not None:
-            rent_amount = float(t.billing_profile.rent_amount)
-        elif t.parent_tenant_id:
-            # Sub-tenant defaults to 0 if no profile
-            rent_amount = 0
-        elif t.room and t.room.base_rent:
-            # Primary/Standard tenant defaults to room base rent
-            rent_amount = float(t.room.base_rent)
-        else:
-            rent_amount = 10000 # Fallback
-            
-        # If rent is 0 (e.g. sub-tenant covered by primary), skip rent generation entirely
-        if rent_amount <= 0:
-            # Still check for security deposit if they are new, but skip rent
-            pass
-        else:
-            # Check if already billed for ANY rent in this month
-            existing_rent = Ledger.query.filter(
-                Ledger.tenant_id == t.id,
-                Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
-                Ledger.deleted_at == None
-            ).all()
-            
-            already_billed_rent = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing_rent)
-            
-            if not already_billed_rent:
-                rent_type = 'PRIVATE_RENT' if t.tenancy_type == 'Private' else 'RENT'
-                type_label = "Full Room" if rent_type == 'PRIVATE_RENT' else "Shared"
+        for f in bulk_floors:
+            if not f.bulk_tenant_id:
+                continue
                 
+            floor_description = f"Floor Rent ({f.name}) for {month_label}"
+            
+            existing = Ledger.query.filter_by(
+                tenant_id=f.bulk_tenant_id, 
+                type='RENT', 
+                deleted_at=None
+            ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
+            
+            already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+            
+            if not already_billed:
+                # Use the first day of the target month as the timestamp for billing cycle tracking
+                target_date = datetime(year, month, 1, 12, 0)
                 l = Ledger(
-                    tenant_id=t.id,
-                    amount=rent_amount,
-                    type=rent_type,
+                    tenant_id=f.bulk_tenant_id,
+                    amount=f.bulk_rent_amount or 0,
+                    type='RENT',
                     status='PENDING',
-                    description=f"{type_label} Rent - {display_month}",
-                    timestamp=timestamp
+                    description=floor_description,
+                    timestamp=target_date
                 )
                 db.session.add(l)
                 generated += 1
+
+    # 2. Generate Rent for Regular Tenants
+    if room_id:
+        tenants = Tenant.query.filter_by(room_id=room_id, deleted_at=None).all()
+    else:
+        tenants = Tenant.query.filter_by(deleted_at=None).all()
+
+    for t in tenants:
+        if not t.room:
+            continue
             
-        # 2. Automatically generate Initial Security Deposit if it's completely missing
-        # Skip for sub-tenants if you want, but usually everyone pays security
-        deposits = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).all()
-        if not deposits:
-            sec_amt = t.billing_profile.security_deposit if t.billing_profile else (t.room.base_rent if t.room else 0)
-            if sec_amt > 0:
-                sec_l = Ledger(
-                    tenant_id=t.id,
-                    amount=sec_amt,
-                    type='DEPOSIT',
-                    status='PENDING',
-                    description='Initial Security Deposit',
-                    timestamp=t.agreement_start_date or timestamp
-                )
-                db.session.add(sec_l)
-                generated += 1
+        if not room_id and t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
+            continue
+            
+        existing = Ledger.query.filter(
+            Ledger.tenant_id == t.id,
+            Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
+            Ledger.deleted_at == None
+        ).all()
+        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        
+        if not already_billed:
+            rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
+            target_date = datetime(year, month, 1, 12, 0)
+            
+            l = Ledger(
+                tenant_id=t.id,
+                amount=rent_amount,
+                type='RENT',
+                status='PENDING',
+                description=f"Rent for {month_label}",
+                timestamp=target_date
+            )
+            db.session.add(l)
+            generated += 1
             
     db.session.commit()
-    return jsonify({"message": f"Successfully generated {generated} billing items for {display_month}."}), 200
+    return jsonify({"message": f"Generated rent for {generated} profiles for {month_label}"}), 200
 
-@finance_bp.route('/finance/manual-charge', methods=['POST'])
-def add_manual_charge():
-    """Allows admin to manually inject a PENDING charge/bill into a tenant's ledger (with backdating support)"""
-    data = request.json
-    tenant_id = data.get('tenant_id')
-    amount = float(data.get('amount', 0))
-    charge_type = data.get('type', 'RENT') # 'RENT', 'DEPOSIT', 'UTILITY', 'FINE'
-    description = data.get('description', '')
+@finance_bp.route('/finance/room-ledger/<int:room_id>', methods=['GET'])
+def get_room_ledger(room_id):
+    from backend.models import Room
+    room = Room.query.get_or_404(room_id)
+    tenants = Tenant.query.filter_by(room_id=room_id, deleted_at=None).all()
     
-    if not tenant_id or amount <= 0:
-        return jsonify({"error": "Invalid data. Amount must be greater than 0."}), 400
+    res_tenants = []
+    total_room_balance = 0
+    
+    # Separate Primary and Sub-tenants
+    primaries = [t for t in tenants if not t.parent_tenant_id]
+    subs = [t for t in tenants if t.parent_tenant_id]
+    
+    # We want Primary at top, then their respective subs
+    ordered_tenants = []
+    for p in primaries:
+        ordered_tenants.append(p)
+        for s in subs:
+            if s.parent_tenant_id == p.id:
+                ordered_tenants.append(s)
+                
+    # Add any orphans (subs whose parent isn't in this room)
+    for s in subs:
+        if s not in ordered_tenants:
+            ordered_tenants.append(s)
+
+    for t in ordered_tenants:
+        # Calculate balance (similar logic to tenants.py)
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+
+        for ledger in t.transactions:
+            if ledger.deleted_at is None:
+                amt = float(ledger.amount)
+                ltype = ledger.type
+                if ltype in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ltype] += amt
+                        due_by_type[ltype] += amt
+                    else:
+                        due_by_type[ltype] += amt
+
+        rent_bal = max(0, (due_by_type['RENT'] + due_by_type['PRIVATE_RENT']) - (paid_by_type['RENT'] + paid_by_type['PRIVATE_RENT']))
+        sec_bal = max(0, due_by_type['DEPOSIT'] - paid_by_type['DEPOSIT'])
+        util_bal = max(0, due_by_type['UTILITY'] - paid_by_type['UTILITY'])
+        fine_bal = max(0, due_by_type['FINE'] - paid_by_type['FINE'])
+        open_bal = max(0, due_by_type['OPENING_BALANCE'] - paid_by_type['OPENING_BALANCE'])
         
-    tenant = Tenant.query.get(tenant_id)
-    if not tenant:
-        return jsonify({"error": "Tenant not found."}), 404
+        tenant_balance = rent_bal + sec_bal + util_bal + fine_bal + open_bal
+        total_room_balance += tenant_balance
         
-    # Date parsing for backdating
-    charge_date = datetime.utcnow()
-    if 'date' in data and data['date']:
-        try:
-            dstr = data.get('date').split('T')[0]
-            # Convert YYYY-MM-DD to a datetime strictly for the Ledger timestamp
-            parsed_date = datetime.strptime(dstr, '%Y-%m-%d')
-            # Retain current time hours/mins to avoid tz shift issues if needed, or just set to midnight
-            charge_date = parsed_date
-        except ValueError:
-            pass
-
-    # For Private Rent mode
-    if charge_type == 'RENT' and tenant.tenancy_type == 'Private':
-        charge_type = 'PRIVATE_RENT'
-
-    # Create the Ledger entry as PENDING (meaning the tenant now owes this money)
-    entry = Ledger(
-        tenant_id=tenant_id,
-        amount=amount,
-        type=charge_type,
-        status='PENDING',
-        description=description or f"Manual Charge: {charge_type}",
-        timestamp=charge_date
-    )
-    
-    db.session.add(entry)
-    db.session.commit()
-    
+        res_tenants.append({
+            "id": t.id,
+            "name": t.name,
+            "is_primary": not t.parent_tenant_id,
+            "parent_id": t.parent_tenant_id,
+            "balance": tenant_balance,
+            "breakdown": {
+                "rent": rent_bal,
+                "security": sec_bal,
+                "utility": util_bal,
+                "fine": fine_bal,
+                "opening": open_bal
+            }
+        })
+        
     return jsonify({
-        "message": f"Successfully charged Rs. {amount} to {tenant.name} for {charge_type}.",
-        "id": entry.id
-    }), 201
+        "room_number": room.number,
+        "total_balance": total_room_balance,
+        "tenants": res_tenants
+    }), 200
+
+@finance_bp.route('/finance/room-summary/<room_num>', methods=['GET'])
+def get_room_summary(room_num):
+    from backend.models import Room
+    room = Room.query.filter_by(number=room_num, deleted_at=None).first_or_404()
+    tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
+    
+    res_primary = []
+    res_subs = []
+    total_room_pending = 0
+    
+    for t in tenants:
+        # Balance calculation logic
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+
+        for ledger in t.transactions:
+            if ledger.deleted_at is None:
+                amt = float(ledger.amount)
+                ltype = ledger.type
+                if ltype in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ltype] += amt
+                        due_by_type[ltype] += amt
+                    else:
+                        due_by_type[ltype] += amt
+
+        tenant_balance = sum(max(0, due_by_type[k] - paid_by_type[k]) for k in due_by_type)
+        total_room_pending += tenant_balance
+        
+        tenant_data = {
+            "id": t.id,
+            "name": t.name,
+            "bed": t.bed_label or "N/A",
+            "phone": t.phone,
+            "balance": tenant_balance
+        }
+        
+        if not t.parent_tenant_id:
+            res_primary.append(tenant_data)
+        else:
+            res_subs.append(tenant_data)
+            
+    return jsonify({
+        "room_number": room.number,
+        "total_pending": total_room_pending,
+        "primary": res_primary,
+        "sub_tenants": res_subs
+    }), 200
+
+@finance_bp.route('/finance/hostel-summary', methods=['GET'])
+def get_hostel_summary():
+    from backend.models import Room
+    rooms = Room.query.filter_by(deleted_at=None).all()
+    res = []
+    
+    for room in rooms:
+        tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
+        if not tenants:
+            continue
+            
+        total_pending = 0
+        primary_name = "No Primary"
+        
+        for t in tenants:
+            due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+            paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+            for ledger in t.transactions:
+                if ledger.deleted_at is None:
+                    amt = float(ledger.amount)
+                    if ledger.type in due_by_type:
+                        if ledger.status == 'PAID':
+                            paid_by_type[ledger.type] += amt
+                            due_by_type[ledger.type] += amt
+                        else:
+                            due_by_type[ledger.type] += amt
+            
+            tenant_balance = sum(max(0, due_by_type[k] - paid_by_type[k]) for k in due_by_type)
+            total_pending += tenant_balance
+            
+            if not t.parent_tenant_id:
+                primary_name = t.name
+        
+        # If no explicit primary, use the first tenant's name
+        if primary_name == "No Primary" and tenants:
+            primary_name = tenants[0].name
+
+        res.append({
+            "room_number": room.number,
+            "primary_name": primary_name,
+            "total_pending": total_pending
+        })
+    
+    # Sort by room number
+    res.sort(key=lambda x: x['room_number'])
+    return jsonify(res), 200
 
 @finance_bp.route('/finance/opening-balance', methods=['POST'])
 def add_opening_balance():
     data = request.json
     tenant_id = data.get('tenant_id')
     amount = float(data.get('amount', 0))
-    # balance_type: 'DUE' (owed by tenant), 'ADVANCE' (paid in advance), or 'OWNER_FUND' (capital injection)
+    # balance_type: 'DUE' (owed by tenant) or 'ADVANCE' (paid in advance)
     balance_type = data.get('balance_type', 'DUE')
     
-    if amount <= 0:
-        return jsonify({"error": "Invalid amount"}), 400
-        
-    if balance_type != 'OWNER_FUND' and not tenant_id:
-        return jsonify({"error": "Tenant is required"}), 400
+    if not tenant_id or amount <= 0:
+        return jsonify({"error": "Invalid data"}), 400
         
     if balance_type == 'DUE':
         # Create a PENDING entry (Receivable)
@@ -432,18 +439,6 @@ def add_opening_balance():
             type='OPENING_BALANCE',
             status='PENDING',
             description="Manual Opening Balance (Due)"
-        )
-    elif balance_type == 'OWNER_FUND':
-        # Create a PAID entry (Capital Injection)
-        # We use System ID 0 to represent Owner Equity professionally
-        # This completely resolves the database NOT NULL constraint securely
-        entry = Ledger(
-            tenant_id=0,
-            amount=amount,
-            type='OWNER_FUND',
-            status='PAID',
-            payment_method='Manual Entry',
-            description="Owner Capital / Funds Added"
         )
     else:
         # Create a PAID entry (Advance/Credit)
@@ -456,144 +451,55 @@ def add_opening_balance():
             description="Manual Opening Balance (Advance/Credit)"
         )
         
-    try:
-        db.session.add(entry)
-        db.session.commit()
-        return jsonify({"message": "Opening balance added successfully"}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"Database error details: {str(e)}"}), 500
-
-@finance_bp.route('/finance/room-summary/<room_number>', methods=['GET'])
-def get_room_summary(room_number):
-    from backend.models import Room
-    room_obj = Room.query.filter_by(number=room_number, deleted_at=None).first()
-    if not room_obj:
-        return jsonify({"error": f"Room {room_number} not found"}), 404
-        
-    tenants = room_obj.get_active_tenants()
-    
-    primary_tenants = [t for t in tenants if t.parent_tenant_id is None]
-    sub_tenants = [t for t in tenants if t.parent_tenant_id is not None]
-    
-    def get_tenant_summary(t):
-        # Calculate balance from billing_profile or ledger
-        # Assuming we have a helper or can calculate here
-        pending_ledgers = Ledger.query.filter_by(tenant_id=t.id, status='PENDING', deleted_at=None).all()
-        balance = sum(float(l.amount) for l in pending_ledgers)
-        
-        return {
-            "id": t.id,
-            "name": t.name,
-            "phone": t.phone,
-            "balance": balance,
-            "rent_amount": float(t.billing_profile.rent_amount if t.billing_profile else 0),
-            "is_primary": t.parent_tenant_id is None,
-            "bed": t.bed_label or "N/A"
-        }
-
-    res_primary = [get_tenant_summary(t) for t in primary_tenants]
-    res_sub = [get_tenant_summary(t) for t in sub_tenants]
-    
-    # NEW: Bulk Information
-    bulk_details = None
-    if room_obj.is_bulk_rented and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
-        floor = room_obj.floor_ref
-        from backend.models import Tenant
-        bulk_tenant = Tenant.query.get(floor.bulk_tenant_id) if floor.bulk_tenant_id else None
-        
-        # Calculate Bulk Tenant Balance
-        bulk_balance = 0
-        if bulk_tenant:
-            pending_ledgers = Ledger.query.filter_by(tenant_id=bulk_tenant.id, status='PENDING', deleted_at=None).all()
-            bulk_balance = sum(float(l.amount) for l in pending_ledgers)
-            
-        bulk_details = {
-            "is_bulk": True,
-            "floor_name": floor.name,
-            "bulk_tenant_id": floor.bulk_tenant_id,
-            "bulk_tenant_name": bulk_tenant.name if bulk_tenant else "No Tenant Assigned",
-            "bulk_balance": bulk_balance,
-            "linked_rooms": [r.number for r in floor.rooms if r.is_bulk_rented and r.deleted_at is None]
-        }
-        
-    return jsonify({
-        "room_number": room_obj.number,
-        "primary": res_primary,
-        "sub_tenants": res_sub,
-        "bulk_details": bulk_details,
-        "total_pending": sum(t['balance'] for t in res_primary) + sum(t['balance'] for t in res_sub)
-    }), 200
-
-@finance_bp.route('/finance/hostel-summary', methods=['GET'])
-def get_hostel_summary():
-    from backend.models import Room, Tenant
-    rooms = Room.query.filter_by(deleted_at=None).order_by(Room.number.asc()).all()
-    
-    res = []
-    for r in rooms:
-        active_tenants = r.get_active_tenants()
-        if not active_tenants:
-            continue
-            
-        primary = [t for t in active_tenants if t.parent_tenant_id is None]
-        
-        # Calculate room total
-        total_pending = 0
-        tenant_ids = [t.id for t in active_tenants]
-        if tenant_ids:
-            pending_ledgers = Ledger.query.filter(
-                Ledger.tenant_id.in_(tenant_ids), 
-                Ledger.status == 'PENDING', 
-                Ledger.deleted_at == None
-            ).all()
-            total_pending = sum(float(l.amount) for l in pending_ledgers)
-            
-        res.append({
-            "room_id": r.id,
-            "room_number": r.number,
-            "primary_name": primary[0].name if primary else "No Primary",
-            "occupancy": len(active_tenants),
-            "total_pending": total_pending,
-            "is_bulk": r.is_bulk_rented
-        })
-        
-    return jsonify(res), 200
-
-@finance_bp.route('/finance/data-repair', methods=['POST'])
-def repair_financial_data():
-    """One-time cleanup script to zero out incorrect sub-tenant balances"""
-    from backend.models import Tenant, BillingProfile
-    
-    # 1. Find all sub-tenants
-    sub_tenants = Tenant.query.filter(Tenant.parent_tenant_id != None, Tenant.deleted_at == None).all()
-    
-    fixed_count = 0
-    voided_count = 0
-    
-    for t in sub_tenants:
-        # Zero out rent in billing profile if it exists
-        if t.billing_profile and t.billing_profile.rent_amount > 0:
-            t.billing_profile.rent_amount = 0
-            fixed_count += 1
-            
-        # Void pending rent charges in ledger
-        pending_rent = Ledger.query.filter(
-            Ledger.tenant_id == t.id,
-            Ledger.status == 'PENDING',
-            Ledger.type.in_(['RENT', 'PRIVATE_RENT', 'RENT_DUES']),
-            Ledger.deleted_at == None
-        ).all()
-        
-        for entry in pending_rent:
-            entry.status = 'VOIDED'
-            entry.description = (entry.description or "") + " (Auto-Voided: Sub-tenant covered by Primary)"
-            voided_count += 1
-            
+    db.session.add(entry)
     db.session.commit()
+    return jsonify({"message": "Opening balance added successfully"}), 201
+
+@finance_bp.route('/finance/room-billing-status/<room_num>', methods=['GET'])
+def get_room_billing_status(room_num):
+    from backend.models import Room
+    room = Room.query.filter_by(number=room_num, deleted_at=None).first_or_404()
     
+    # Cycle parameters
+    month = int(request.args.get('month', datetime.utcnow().month))
+    year = int(request.args.get('year', datetime.utcnow().year))
+    target_month_str = f"{year}-{month:02d}"
+    
+    tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
+    
+    total_room_pending = 0
+    cycle_billed = False
+    details = []
+    
+    for t in tenants:
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+
+        for ledger in t.transactions:
+            if ledger.deleted_at is None:
+                amt = float(ledger.amount)
+                if ledger.type in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ledger.type] += amt
+                        due_by_type[ledger.type] += amt
+                    else:
+                        due_by_type[ledger.type] += amt
+                
+                # Check if this cycle is already billed for any tenant in the room
+                if ledger.type in ['RENT', 'PRIVATE_RENT'] and ledger.timestamp.strftime('%Y-%m') == target_month_str:
+                    cycle_billed = True
+
+        tenant_balance = sum(max(0, due_by_type[k] - paid_by_type[k]) for k in due_by_type)
+        total_room_pending += tenant_balance
+        details.append({
+            "name": t.name,
+            "balance": tenant_balance,
+            "role": "Primary" if not t.parent_tenant_id else "Sub-tenant"
+        })
+            
     return jsonify({
-        "message": "Financial data repair completed successfully.",
-        "profiles_reset": fixed_count,
-        "entries_voided": voided_count
+        "room_number": room.number,
+        "total_pending": total_room_pending,
+        "cycle_billed": cycle_billed,
+        "tenants": details
     }), 200
