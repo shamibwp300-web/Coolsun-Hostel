@@ -162,22 +162,34 @@ def manage_expense(expense_id):
 @finance_bp.route('/finance/generate-rent', methods=['POST'])
 def generate_bulk_rent():
     from backend.models import Floor, Room
+    import calendar
     data = request.json or {}
     room_id = data.get('room_id')
-    current_month_str = datetime.utcnow().strftime('%Y-%m')
+    room_number = data.get('room_number')
+    
+    # Resolve room_id if room_number is provided
+    if not room_id and room_number:
+        room_obj = Room.query.filter_by(number=str(room_number), deleted_at=None).first()
+        if room_obj:
+            room_id = room_obj.id
+    
+    # Cycle Selection logic
+    now = datetime.utcnow()
+    month = int(data.get('month', now.month))
+    year = int(data.get('year', now.year))
+    
+    current_month_str = f"{year}-{month:02d}"
+    month_label = f"{calendar.month_name[month]} {year}"
+    
     generated = 0
     
-    # 1. Generate Rent for Bulk Rented Floors (Fixed Rent for the Bulk Tenant)
-    # Skip if we are generating for a specific room unless that room belongs to a bulk-rented floor?
-    # Actually, if room_id is specified, we focus on that room's tenants.
+    # 1. Generate Rent for Bulk Rented Floors
     if not room_id:
         bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
         for f in bulk_floors:
             if not f.bulk_tenant_id:
                 continue
                 
-            # Check if already billed FOR THIS FLOOR specifically
-            month_label = datetime.utcnow().strftime('%B %Y')
             floor_description = f"Floor Rent ({f.name}) for {month_label}"
             
             existing = Ledger.query.filter_by(
@@ -189,12 +201,15 @@ def generate_bulk_rent():
             already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
             
             if not already_billed:
+                # Use the first day of the target month as the timestamp for billing cycle tracking
+                target_date = datetime(year, month, 1, 12, 0)
                 l = Ledger(
                     tenant_id=f.bulk_tenant_id,
                     amount=f.bulk_rent_amount or 0,
                     type='RENT',
                     status='PENDING',
-                    description=floor_description
+                    description=floor_description,
+                    timestamp=target_date
                 )
                 db.session.add(l)
                 generated += 1
@@ -209,11 +224,9 @@ def generate_bulk_rent():
         if not t.room:
             continue
             
-        # Skip if the tenant's room belongs to a bulk-rented floor
         if not room_id and t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
             continue
             
-        # Check BOTH RENT and PRIVATE_RENT types
         existing = Ledger.query.filter(
             Ledger.tenant_id == t.id,
             Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
@@ -223,19 +236,21 @@ def generate_bulk_rent():
         
         if not already_billed:
             rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
+            target_date = datetime(year, month, 1, 12, 0)
             
             l = Ledger(
                 tenant_id=t.id,
                 amount=rent_amount,
                 type='RENT',
                 status='PENDING',
-                description=f"Rent for {datetime.utcnow().strftime('%B %Y')}"
+                description=f"Rent for {month_label}",
+                timestamp=target_date
             )
             db.session.add(l)
             generated += 1
             
     db.session.commit()
-    return jsonify({"message": f"Generated rent for {generated} profiles"}), 200
+    return jsonify({"message": f"Generated rent for {generated} profiles for {month_label}"}), 200
 
 @finance_bp.route('/finance/room-ledger/<int:room_id>', methods=['GET'])
 def get_room_ledger(room_id):
@@ -439,3 +454,52 @@ def add_opening_balance():
     db.session.add(entry)
     db.session.commit()
     return jsonify({"message": "Opening balance added successfully"}), 201
+
+@finance_bp.route('/finance/room-billing-status/<room_num>', methods=['GET'])
+def get_room_billing_status(room_num):
+    from backend.models import Room
+    room = Room.query.filter_by(number=room_num, deleted_at=None).first_or_404()
+    
+    # Cycle parameters
+    month = int(request.args.get('month', datetime.utcnow().month))
+    year = int(request.args.get('year', datetime.utcnow().year))
+    target_month_str = f"{year}-{month:02d}"
+    
+    tenants = Tenant.query.filter_by(room_id=room.id, deleted_at=None).all()
+    
+    total_room_pending = 0
+    cycle_billed = False
+    details = []
+    
+    for t in tenants:
+        due_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+        paid_by_type = {'RENT': 0, 'PRIVATE_RENT': 0, 'DEPOSIT': 0, 'UTILITY': 0, 'FINE': 0, 'OPENING_BALANCE': 0}
+
+        for ledger in t.transactions:
+            if ledger.deleted_at is None:
+                amt = float(ledger.amount)
+                if ledger.type in due_by_type:
+                    if ledger.status == 'PAID':
+                        paid_by_type[ledger.type] += amt
+                        due_by_type[ledger.type] += amt
+                    else:
+                        due_by_type[ledger.type] += amt
+                
+                # Check if this cycle is already billed for any tenant in the room
+                if ledger.type in ['RENT', 'PRIVATE_RENT'] and ledger.timestamp.strftime('%Y-%m') == target_month_str:
+                    cycle_billed = True
+
+        tenant_balance = sum(max(0, due_by_type[k] - paid_by_type[k]) for k in due_by_type)
+        total_room_pending += tenant_balance
+        details.append({
+            "name": t.name,
+            "balance": tenant_balance,
+            "role": "Primary" if not t.parent_tenant_id else "Sub-tenant"
+        })
+            
+    return jsonify({
+        "room_number": room.number,
+        "total_pending": total_room_pending,
+        "cycle_billed": cycle_billed,
+        "tenants": details
+    }), 200
