@@ -209,8 +209,24 @@ class Expense(db.Model, SoftDeleteMixin):
     date = db.Column(db.Date)
     approval_status = db.Column(db.String(20), default="Pending")
 
+class SystemSetting(db.Model, SoftDeleteMixin):
+    __tablename__ = "system_settings"
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True)
+    value = db.Column(db.String(255))
+    description = db.Column(db.Text)
+
 class MoveOutRecord(db.Model, SoftDeleteMixin):
     __tablename__ = "move_out_records"
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"))
     exit_date = db.Column(db.Date)
+    security_deposit_held = db.Column(db.Numeric(10, 2), default=0)
+    damage_deduction = db.Column(db.Numeric(10, 2), default=0)
+    fine_deduction = db.Column(db.Numeric(10, 2), default=0)
+    unpaid_rent = db.Column(db.Numeric(10, 2), default=0)
+    refund_amount = db.Column(db.Numeric(10, 2), default=0)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    tenant = db.relationship("Tenant", backref="move_out_records")

@@ -20,7 +20,6 @@ class User(db.Model, SoftDeleteMixin):
     username = db.Column(db.String(50), unique=True)
     password_hash = db.Column(db.String(255))
     role = db.Column(db.Enum("Owner", "Manager", "Admin"))
-    permissions = db.Column(db.JSON, nullable=True) # {"dashboard": true, "tenants": true, ...}
     is_on_duty = db.Column(db.Boolean, default=True)
     def set_password(self, pw): self.password_hash = generate_password_hash(pw)
     def check_password(self, pw): return check_password_hash(self.password_hash, pw)
@@ -200,12 +199,6 @@ class AuditLog(db.Model):
     action = db.Column(db.String(255))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-class SystemSetting(db.Model):
-    __tablename__ = "system_settings"
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(100), unique=True, nullable=False)
-    value = db.Column(db.String(255))
-
 class Expense(db.Model, SoftDeleteMixin):
     __tablename__ = "expenses"
     id = db.Column(db.Integer, primary_key=True)
@@ -213,22 +206,27 @@ class Expense(db.Model, SoftDeleteMixin):
     category = db.Column(db.String(100))
     description = db.Column(db.Text)
     sub_note = db.Column(db.Text)
-    date = db.Column(db.Date, default=date.today)
+    date = db.Column(db.Date)
     approval_status = db.Column(db.String(20), default="Pending")
+
+class SystemSetting(db.Model, SoftDeleteMixin):
+    __tablename__ = "system_settings"
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True)
+    value = db.Column(db.String(255))
+    description = db.Column(db.Text)
 
 class MoveOutRecord(db.Model, SoftDeleteMixin):
     __tablename__ = "move_out_records"
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"))
     exit_date = db.Column(db.Date)
-
-class CCTVCamera(db.Model, SoftDeleteMixin):
-    __tablename__ = "cctv_cameras"
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.Enum('Stream', 'Embed'), default='Embed') # Stream (HLS/Direct) vs Embed (iFrame)
-    url = db.Column(db.Text, nullable=False) # The .m3u8 link or the <iframe> source
-    description = db.Column(db.String(255))
-    position_index = db.Column(db.Integer, default=0)
-    is_active = db.Column(db.Boolean, default=True)
+    security_deposit_held = db.Column(db.Numeric(10, 2), default=0)
+    damage_deduction = db.Column(db.Numeric(10, 2), default=0)
+    fine_deduction = db.Column(db.Numeric(10, 2), default=0)
+    unpaid_rent = db.Column(db.Numeric(10, 2), default=0)
+    refund_amount = db.Column(db.Numeric(10, 2), default=0)
+    notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    tenant = db.relationship("Tenant", backref="move_out_records")

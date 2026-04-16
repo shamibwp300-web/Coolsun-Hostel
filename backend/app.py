@@ -50,29 +50,19 @@ def find_best_db():
 
 _DB_PATH = find_best_db()
 
-# Persistent Upload Folder (Docker Volume mapping)
-# Prioritize /app/uploads if it exists (Prod/Coolify environment)
-_PERSISTENT_UPLOAD_BASE = "/app/uploads" if os.path.exists("/app/uploads") else os.path.join(os.path.dirname(__file__), 'static', 'uploads')
-_UPLOAD_DIR = os.path.join(_PERSISTENT_UPLOAD_BASE, 'documents')
-os.makedirs(_UPLOAD_DIR, exist_ok=True)
-
 def create_app():
     # Configure Flask to serve static files from the React dist folder securely
     _FRONTEND_DIST = os.path.abspath(os.path.join(_BASE_DIR, 'frontend', 'dist'))
     app = Flask(__name__, static_folder=_FRONTEND_DIST, static_url_path='/')
     
     # 🛰️ DATABASE CONFIGURATION
-    # Agar .env mein DATABASE_URL hai (Supabase), toh wo use hoga. 
-    # Agar nahi hai, toh purana hostel.db (SQLite) chale ga.
     supabase_url = os.getenv('DATABASE_URL')
     if supabase_url and supabase_url.startswith("postgres://"):
-        # Fix for SQLAlchemy (Postgresql:// instead of postgres://)
         supabase_url = supabase_url.replace("postgres://", "postgresql://", 1)
     
     app.config['SQLALCHEMY_DATABASE_URI'] = supabase_url or f'sqlite:///{_DB_PATH}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
-    app.config['UPLOAD_FOLDER'] = _UPLOAD_DIR
     
     # 🛰️ EMERGENCY SCHEMA REPAIR FUNCTION
     def repair_schema(engine):
@@ -90,28 +80,24 @@ def create_app():
                     if 'deleted_at' not in columns:
                         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN deleted_at DATETIME"))
                         conn.commit()
-                        app.logger.info(f"✅ AUTO-REPAIR: Added 'deleted_at' to {table}")
+                        print(f"✅ AUTO-REPAIR: Added 'deleted_at' to {table}")
                     
                     # 2. Add meter_number to rooms specifically
                     if table == 'rooms' and 'meter_number' not in columns:
                         conn.execute(text("ALTER TABLE rooms ADD COLUMN meter_number VARCHAR(50)"))
                         conn.commit()
-                        app.logger.info(f"✅ AUTO-REPAIR: Added 'meter_number' to rooms")
-                    # 3. Add permissions to users specifically
-                    if table == 'users' and 'permissions' not in columns:
-                        # For SQLite, we add as TEXT (handling JSON), for others JSON
-                        col_type = "JSON" if engine.name != 'sqlite' else "TEXT"
-                        conn.execute(text(f"ALTER TABLE users ADD COLUMN permissions {col_type}"))
-                        conn.commit()
-                        app.logger.info(f"✅ AUTO-REPAIR: Added 'permissions' to users")
-                    
-                    # 4. Add CCTV Cameras table if missing
-                    if 'cctv_cameras' not in tables:
-                        # Simple rebuild check for SQLite
-                        db.create_all()
-                        app.logger.info(f"✅ AUTO-REPAIR: Verified cctv_cameras table")
+                        print(f"✅ AUTO-REPAIR: Added 'meter_number' to rooms")
+                    # 3. Add MoveOutRecord columns
+                    if table == 'move_out_records':
+                        mo_cols = ['security_deposit_held', 'damage_deduction', 'fine_deduction', 'unpaid_rent', 'refund_amount', 'notes', 'created_at']
+                        for col in mo_cols:
+                            if col not in columns:
+                                col_type = "DATETIME" if col == 'created_at' else ("TEXT" if col == 'notes' else "NUMERIC(10,2)")
+                                conn.execute(text(f"ALTER TABLE move_out_records ADD COLUMN {col} {col_type}"))
+                                conn.commit()
+                                print(f"✅ AUTO-REPAIR: Added {col} to move_out_records")
                 except Exception as e:
-                    app.logger.warning(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
+                    print(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
                     try: conn.rollback()
                     except: pass
     
@@ -119,11 +105,7 @@ def create_app():
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     
-    # ─── Cloudflare Proxy Fix ───────────────────────────────────────────────────
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-    # ─── CORS ───────────────────────────────────────────────────────────────────
-    # Local development aur Live site dono ke liye allow kiya hai
     CORS(app, resources={r"/api/*": {"origins": ["https://hostel.coolsun.co.uk", "http://localhost:5173", "http://localhost:3000"]}})
 
     db.init_app(app)
@@ -134,12 +116,11 @@ def create_app():
             repair_schema(db.engine)
             db.create_all()
     except Exception as e:
-        app.logger.warning(f"Database setup skipped/failed: {e}")
+        print(f"Database setup failed: {e}")
 
-    # 2. Auto-seed default users (Independently wrapped)
+    # 2. Auto-seed default users
     try:
         with app.app_context():
-            # 🛡️ Structural Guard: Auto-migration for SQLite/Postgres
             from sqlalchemy import text, inspect
             inspector = inspect(db.engine)
             queries = []
@@ -149,58 +130,29 @@ def create_app():
             if 'agreement_url' not in tenant_cols:
                 queries.append("ALTER TABLE tenants ADD COLUMN agreement_url VARCHAR(255)")
                 
-            # Ledger table checks
-            if 'ledger' in inspector.get_table_names():
-                ledger_cols = [c['name'] for c in inspector.get_columns('ledger')]
-                if 'payment_method' not in ledger_cols:
-                    queries.append("ALTER TABLE ledger ADD COLUMN payment_method VARCHAR(50) DEFAULT 'Cash'")
-            
             with db.engine.connect() as conn:
                 for q in queries:
                     try:
                         conn.execute(text(q))
                         conn.commit()
-                        print(f"✅ AUTO-MIGRATION: {q}")
                     except Exception:
                         try: conn.rollback()
                         except: pass
 
             from backend.models import User
-            import json
-            
-            # Default permissions for Super Admins
-            full_perms = {
-                "dashboard": True, "wizard": True, "tenants": True, "rooms": True,
-                "bulk_rent": True, "police": True, "tasks": True, "electricity": True,
-                "finance": True, "maintenance": True, "cctv": True, "reports": True,
-                "audit": True, "settings": True
-            }
-
             if not User.query.filter_by(username='admin').first():
-                u = User(username='admin', role='Owner', permissions=full_perms)
+                u = User(username='admin', role='Owner')
                 u.set_password('admin123')
                 db.session.add(u)
-                db.session.commit()
-                print("🚀 AUTO-SEED: Admin User (admin/admin123) Created.")
                 
             if not User.query.filter_by(username='ewardjain@gmail.com').first():
-                o = User(username='ewardjain@gmail.com', role='Owner', permissions=full_perms)
+                o = User(username='ewardjain@gmail.com', role='Owner')
                 o.set_password('Coolsun@23*+')
                 db.session.add(o)
-                db.session.commit()
-                print("🚀 AUTO-SEED: Owner User (ewardjain@gmail.com) Created.")
-            
-            # Update existing admins who might not have permissions set yet
-            admins = User.query.filter(User.role == 'Owner', User.permissions == None).all()
-            for admin in admins:
-                admin.permissions = full_perms
-            if admins:
-                db.session.commit()
-                print(f"✅ Repaired permissions for {len(admins)} super users.")
+                
+            db.session.commit()
     except Exception as e:
-        # We don't rollback here because if it fails due to a lock, another worker might have done it
-        app.logger.warning(f"Auto-seed skipped/failed (likely concurrent startup): {e}")
-
+        print(f"Auto-seed failed: {e}")
     # Register Blueprints
     from backend.routes.onboarding import onboarding_bp
     from backend.routes.dashboard import dashboard_bp
@@ -214,8 +166,6 @@ def create_app():
     from backend.routes.finance import finance_bp
     from backend.routes.admin import admin_bp
     from backend.routes.auth import auth_bp
-    from backend.routes.users import users_bp
-    from backend.routes.cctv import cctv_bp
 
     app.register_blueprint(onboarding_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api')
@@ -229,8 +179,6 @@ def create_app():
     app.register_blueprint(finance_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')
-    app.register_blueprint(users_bp, url_prefix='/api')
-    app.register_blueprint(cctv_bp, url_prefix='/api')
 
     # ─── Debug / Schema Recovery Endpoint ──────────────────────────────────────
     @app.route('/api/debug/inspect-db')
@@ -253,11 +201,11 @@ def create_app():
         
         return jsonify({"tables": schema_info, "counts": counts}), 200
 
-    # ─── Static Files for Uploads ──────────────────────────────────────────────
-    @app.route('/api/docs/<path:filename>')
-    def serve_uploaded_docs(filename):
-        # Serve from the persistent upload directory
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    # ─── Debug Routes ──────────────────────────────────────────────────────────
+    @app.route('/api/debug/ping')
+    def ping():
+        db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
+        return jsonify({"status": "Online", "database": db_type}), 200
 
     # ─── SPA Fallback Route ─────────────────────────────────────────────────────
     @app.route('/', defaults={'path': ''})

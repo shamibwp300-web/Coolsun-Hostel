@@ -87,6 +87,15 @@ def create_app():
                         conn.execute(text("ALTER TABLE rooms ADD COLUMN meter_number VARCHAR(50)"))
                         conn.commit()
                         print(f"✅ AUTO-REPAIR: Added 'meter_number' to rooms")
+                    # 3. Add MoveOutRecord columns
+                    if table == 'move_out_records':
+                        mo_cols = ['security_deposit_held', 'damage_deduction', 'fine_deduction', 'unpaid_rent', 'refund_amount', 'notes', 'created_at']
+                        for col in mo_cols:
+                            if col not in columns:
+                                col_type = "DATETIME" if col == 'created_at' else ("TEXT" if col == 'notes' else "NUMERIC(10,2)")
+                                conn.execute(text(f"ALTER TABLE move_out_records ADD COLUMN {col} {col_type}"))
+                                conn.commit()
+                                print(f"✅ AUTO-REPAIR: Added {col} to move_out_records")
                 except Exception as e:
                     print(f"⚠️ AUTO-REPAIR skipped for {table}: {e}")
                     try: conn.rollback()

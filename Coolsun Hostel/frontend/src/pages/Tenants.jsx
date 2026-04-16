@@ -67,21 +67,19 @@ const Tenants = () => {
 
     const handleMoveOut = async () => {
         if (!moveOutForm.exit_date) { alert('Exit date is required'); return; }
-        if (!window.confirm(`Process move-out for ${moveOutTenant.name}? This will archive their record.`)) return;
+        if (!window.confirm(`Process move-out for ${moveOutTenant.name}? This will automatically deduct dues from their security deposit and archive their record.`)) return;
         setMoveOutLoading(true);
         try {
             const payload = {
                 tenant_id: moveOutTenant.id,
-                notice_date: moveOutForm.notice_date,
                 exit_date: moveOutForm.exit_date,
-                security_deposit_held: settlementPreview?.security_deposit_held || 0,
                 damage_deduction: parseFloat(moveOutForm.damage_deduction) || 0,
                 fine_deduction: parseFloat(moveOutForm.fine_deduction) || 0,
-                unpaid_rent: settlementPreview?.unpaid_rent || 0,
-                notes: moveOutForm.notes
+                notes: moveOutForm.notes,
+                payment_method: 'Cash' // Defaulting to Cash for refund
             };
-            const r = await axios.post('/api/moveout', payload);
-            alert(`✅ Move-out processed!\nRefund to tenant: Rs. ${r.data.refund_amount}`);
+            const r = await axios.post('/api/moveout/finalize', payload);
+            alert(`✅ Move-out processed!\nFinal Security Refund to tenant: Rs. ${r.data.refund_amount.toLocaleString()}\nRemaining Owed By Tenant: Rs. ${r.data.remaining_owed.toLocaleString()}`);
             setMoveOutTenant(null);
             setSettlementPreview(null);
             fetchTenants();

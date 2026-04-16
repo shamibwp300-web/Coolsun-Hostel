@@ -238,6 +238,22 @@ def generate_bulk_rent():
             rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
             target_date = datetime(year, month, 1, 12, 0)
             
+            # --- Auto-Security Generation (First Month Only) ---
+            # If tenant's agreement month matches this cycle, check if security was already billed
+            is_first_month = t.agreement_start_date and t.agreement_start_date.year == year and t.agreement_start_date.month == month
+            if is_first_month:
+                has_security_ledger = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).first()
+                if not has_security_ledger and t.billing_profile and t.billing_profile.security_deposit > 0:
+                    db.session.add(Ledger(
+                        tenant_id=t.id,
+                        amount=t.billing_profile.security_deposit,
+                        type='DEPOSIT',
+                        status='PENDING',
+                        description=f"Security Deposit (Initial Billing)",
+                        timestamp=target_date
+                    ))
+            
+            # Generate the Rent entry
             l = Ledger(
                 tenant_id=t.id,
                 amount=rent_amount,
