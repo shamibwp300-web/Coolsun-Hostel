@@ -854,6 +854,18 @@ const Tenants = () => {
                                             className="glass-input w-full h-12 px-4 rounded-xl" />
                                     </div>
                                 </div>
+
+                                {settlementPreview && settlementPreview.security_deposit_held === 0 && (
+                                    <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-xl flex items-start gap-3">
+                                        <div className="p-2 bg-yellow-500/20 rounded-lg text-yellow-500">
+                                            <AlertTriangle size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-yellow-500 font-bold text-sm">No Security Deposit Held!</p>
+                                            <p className="text-white/60 text-xs mt-0.5">This tenant has Rs. 0 in security. Please verify if they paid security before proceeding with deductions.</p>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Damage Deduction (Rs.)</label>

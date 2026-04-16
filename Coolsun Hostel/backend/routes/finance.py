@@ -227,31 +227,32 @@ def generate_bulk_rent():
         if not room_id and t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
             continue
             
-        existing = Ledger.query.filter(
+        # --- Auto-Security Generation (Catch-up) ---
+        # Ensure every tenant has at least one DEPOSIT ledger entry (Pending or Paid)
+        has_security_ledger = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).first()
+        if not has_security_ledger and t.billing_profile and t.billing_profile.security_deposit > 0:
+            target_date = datetime(year, month, 1, 12, 0)
+            db.session.add(Ledger(
+                tenant_id=t.id,
+                amount=t.billing_profile.security_deposit,
+                type='DEPOSIT',
+                status='PENDING',
+                description=f"Security Deposit (Initial Automated Billing)",
+                timestamp=target_date
+            ))
+            generated += 1
+            
+        # --- Rent Generation ---
+        existing_rent = Ledger.query.filter(
             Ledger.tenant_id == t.id,
             Ledger.type.in_(['RENT', 'PRIVATE_RENT']),
             Ledger.deleted_at == None
         ).all()
-        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing_rent)
         
         if not already_billed:
             rent_amount = t.billing_profile.rent_amount if t.billing_profile else (t.room.base_rent or 10000)
             target_date = datetime(year, month, 1, 12, 0)
-            
-            # --- Auto-Security Generation (First Month Only) ---
-            # If tenant's agreement month matches this cycle, check if security was already billed
-            is_first_month = t.agreement_start_date and t.agreement_start_date.year == year and t.agreement_start_date.month == month
-            if is_first_month:
-                has_security_ledger = Ledger.query.filter_by(tenant_id=t.id, type='DEPOSIT', deleted_at=None).first()
-                if not has_security_ledger and t.billing_profile and t.billing_profile.security_deposit > 0:
-                    db.session.add(Ledger(
-                        tenant_id=t.id,
-                        amount=t.billing_profile.security_deposit,
-                        type='DEPOSIT',
-                        status='PENDING',
-                        description=f"Security Deposit (Initial Billing)",
-                        timestamp=target_date
-                    ))
             
             # Generate the Rent entry
             l = Ledger(

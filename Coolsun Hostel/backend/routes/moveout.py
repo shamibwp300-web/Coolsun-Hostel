@@ -101,6 +101,32 @@ def finalize_moveout():
         "remaining_owed": remaining_liability
     }), 200
 
+@moveout_bp.route('/moveout/<int:tenant_id>', methods=['GET'])
+def get_moveout_preview(tenant_id):
+    """Calculate potential refund/arrears for move-out preview."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    
+    # 1. Calculate Security Held (PAID entries)
+    deposit_ledgers = Ledger.query.filter_by(tenant_id=tenant_id, type='DEPOSIT', status='PAID', deleted_at=None).all()
+    security_held = sum(float(l.amount) for l in deposit_ledgers)
+    
+    # 2. Calculate Unpaid Dues
+    due_ledgers = Ledger.query.filter(
+        Ledger.tenant_id == tenant_id,
+        Ledger.status == 'PENDING',
+        Ledger.type != 'DEPOSIT',
+        Ledger.deleted_at == None
+    ).all()
+    unpaid_dues = sum(float(l.amount) for l in due_ledgers)
+    
+    return jsonify({
+        "tenant_id": tenant_id,
+        "tenant_name": tenant.name,
+        "security_deposit_held": security_held,
+        "unpaid_rent": unpaid_dues,
+        "estimated_refund": max(0, security_held - unpaid_dues)
+    }), 200
+
 @moveout_bp.route('/moveout', methods=['GET'])
 def get_moveout_records():
     """History of all move-outs."""
