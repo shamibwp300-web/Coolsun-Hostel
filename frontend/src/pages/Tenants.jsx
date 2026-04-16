@@ -94,12 +94,20 @@ const Tenants = () => {
         e.preventDefault();
         try {
             const formData = new FormData();
-            // Append all existing fields
+            // Append primitive fields from the root and billing_profile
             Object.keys(editingTenant).forEach(key => {
-                if (key !== 'transactions' && key !== 'compliance' && key !== 'compliance_history') {
-                    formData.append(key, editingTenant[key]);
+                const val = editingTenant[key];
+                if (val !== null && typeof val !== 'object' && key !== 'compliance_history') {
+                    formData.append(key, val);
                 }
             });
+
+            // Explicitly flatten billing profile if it was sent as an object
+            if (editingTenant.billing_profile && typeof editingTenant.billing_profile === 'object') {
+                formData.append('rent_amount', editingTenant.billing_profile.rent_amount || '');
+                formData.append('security_deposit', editingTenant.billing_profile.security_deposit || '');
+            }
+
             // Append files if selected
             if (editingTenant.new_files) {
                 Object.keys(editingTenant.new_files).forEach(field => {

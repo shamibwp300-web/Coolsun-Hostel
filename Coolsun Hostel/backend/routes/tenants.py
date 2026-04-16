@@ -107,102 +107,119 @@ def get_tenants():
 
 @tenants_bp.route('/tenants/<int:id>', methods=['PUT'])
 def update_tenant(id):
-    # Retrieve tenant either active or archived
-    tenant = Tenant.query.get_or_404(id)
-    
-    # Standardize data access for both JSON and Form (Multipart)
-    data = request.form if request.form else request.get_json()
-    if not data:
-        data = {}
+    try:
+        # Retrieve tenant either active or archived
+        tenant = Tenant.query.get_or_404(id)
         
-    tenant.name = data.get('name', tenant.name)
-    tenant.phone = data.get('phone', tenant.phone)
-    tenant.cnic = data.get('cnic', tenant.cnic)
-    tenant.father_name = data.get('father_name', tenant.father_name)
-    tenant.permanent_address = data.get('permanent_address', tenant.permanent_address)
-    tenant.emergency_contact = data.get('emergency_contact', tenant.emergency_contact)
-    tenant.police_station = data.get('police_station', tenant.police_station)
-    
-    # Accept either 'bed_label' (new) or 'bed' (legacy frontend key)
-    bed_val = data.get('bed_label') or data.get('bed')
-    if bed_val is not None:
-        tenant.bed_label = bed_val
-    
-    if 'rent_start_date' in data and data.get('rent_start_date'):
-        try:
-            from datetime import datetime
-            tenant.agreement_start_date = datetime.strptime(data.get('rent_start_date'), '%Y-%m-%d').date()
-        except:
-            pass
-    
-    if 'internet_opt_in' in data:
-        val = data.get('internet_opt_in')
-        tenant.internet_opt_in = str(val).lower() == 'true'
+        # Standardize data access for both JSON and Form (Multipart)
+        data = request.form if request.form else request.get_json()
+        if not data:
+            data = {}
+            
+        tenant.name = data.get('name', tenant.name)
+        tenant.phone = data.get('phone', tenant.phone)
+        tenant.cnic = data.get('cnic', tenant.cnic)
+        tenant.father_name = data.get('father_name', tenant.father_name)
+        tenant.permanent_address = data.get('permanent_address', tenant.permanent_address)
+        tenant.emergency_contact = data.get('emergency_contact', tenant.emergency_contact)
+        tenant.police_station = data.get('police_station', tenant.police_station)
         
-    # 🛡️ Handle Multiple Document Uploads (ID Front, ID Back, Police Form, Agreement)
-    import os
-    from datetime import datetime
-    from flask import current_app
-    doc_dir = current_app.config['UPLOAD_FOLDER']
-    os.makedirs(doc_dir, exist_ok=True)
-    
-    files = request.files
-    doc_fields = {
-        'id_front': 'id_card_front_url',
-        'id_back': 'id_card_back_url',
-        'police_form': 'police_form_url',
-        'agreement': 'agreement_url'
-    }
-    
-    for field, attr in doc_fields.items():
-        if field in files:
-            file = files[field]
-            if file and file.filename != '':
-                ts = int(datetime.now().timestamp())
-                ext = os.path.splitext(file.filename)[1]
-                fname = f"tenant_{tenant.id}_{field}_{ts}{ext}"
-                fpath = os.path.join(doc_dir, fname)
-                file.save(fpath)
-                
-                # Standardize to /api/docs/ for frontend access (matches onboarding.py)
-                db_url = f"/api/docs/{fname}"
-                setattr(tenant, attr, db_url)
-                
-                # Also maintain Document table for backward compatibility
-                doc_type_map = {
-                    'id_front': 'ID_Front',
-                    'id_back': 'ID_Back',
-                    'police_form': 'Police_Form',
-                    'agreement': 'Agreement'
-                }
-                new_doc = Document(tenant_id=tenant.id, type=doc_type_map[field], url=db_url)
-                db.session.add(new_doc)
-                
-                if field == 'police_form':
-                    tenant.police_form_submitted = datetime.utcnow()
-
-    if 'tenancy_type' in data:
-        tenant.tenancy_type = data.get('tenancy_type')
+        # Accept either 'bed_label' (new) or 'bed' (legacy frontend key)
+        bed_val = data.get('bed_label') or data.get('bed')
+        if bed_val is not None:
+            tenant.bed_label = bed_val
         
-    if 'parent_tenant_id' in data:
-        pt_id = data.get('parent_tenant_id')
-        tenant.parent_tenant_id = None if pt_id in ['', 'null', 'select', None] else int(pt_id)
+        if 'rent_start_date' in data and data.get('rent_start_date'):
+            try:
+                from datetime import datetime
+                tenant.agreement_start_date = datetime.strptime(data.get('rent_start_date'), '%Y-%m-%d').date()
+            except:
+                pass
         
-    if tenant.billing_profile:
-        if 'rent_amount' in data:
-            tenant.billing_profile.rent_amount = data.get('rent_amount')
-        if 'security_deposit' in data:
-            tenant.billing_profile.security_deposit = data.get('security_deposit')
+        if 'internet_opt_in' in data:
+            val = data.get('internet_opt_in')
+            tenant.internet_opt_in = str(val).lower() == 'true'
+            
+        # 🛡️ Handle Multiple Document Uploads (ID Front, ID Back, Police Form, Agreement)
+        import os
+        from datetime import datetime
+        from flask import current_app
+        doc_dir = current_app.config['UPLOAD_FOLDER']
+        os.makedirs(doc_dir, exist_ok=True)
         
-    db.session.commit()
-    return jsonify({
-        "message": "Successfully updated tenant",
-        "tenant": {
-            "id": tenant.id,
-            "name": tenant.name,
-            "agreement_url": tenant.agreement_url
+        files = request.files
+        doc_fields = {
+            'id_front': 'id_card_front_url',
+            'id_back': 'id_card_back_url',
+            'police_form': 'police_form_url',
+            'agreement': 'agreement_url'
         }
-    }), 200
+        
+        for field, attr in doc_fields.items():
+            if field in files:
+                file = files[field]
+                if file and file.filename != '':
+                    ts = int(datetime.now().timestamp())
+                    ext = os.path.splitext(file.filename)[1]
+                    fname = f"tenant_{tenant.id}_{field}_{ts}{ext}"
+                    fpath = os.path.join(doc_dir, fname)
+                    file.save(fpath)
+                    
+                    # Standardize to /api/docs/ for frontend access (matches onboarding.py)
+                    db_url = f"/api/docs/{fname}"
+                    setattr(tenant, attr, db_url)
+                    
+                    # Also maintain Document table for backward compatibility
+                    doc_type_map = {
+                        'id_front': 'ID_Front',
+                        'id_back': 'ID_Back',
+                        'police_form': 'Police_Form',
+                        'agreement': 'Agreement'
+                    }
+                    new_doc = Document(tenant_id=tenant.id, type=doc_type_map[field], url=db_url)
+                    db.session.add(new_doc)
+                    
+                    if field == 'police_form':
+                        tenant.police_form_submitted = datetime.utcnow()
+
+        if 'tenancy_type' in data:
+            tenant.tenancy_type = data.get('tenancy_type')
+            
+        if 'parent_tenant_id' in data:
+            pt_id = str(data.get('parent_tenant_id', ''))
+            # Handle various "null" strings being sent by different frontend implementations
+            if pt_id.lower() in ['', 'null', 'select', 'none', 'undefined']:
+                tenant.parent_tenant_id = None
+            else:
+                try:
+                    tenant.parent_tenant_id = int(pt_id)
+                except (ValueError, TypeError):
+                    tenant.parent_tenant_id = None
+            
+        if tenant.billing_profile:
+            if 'rent_amount' in data:
+                val = data.get('rent_amount')
+                if val not in ['', None]:
+                    tenant.billing_profile.rent_amount = float(val)
+            if 'security_deposit' in data:
+                val = data.get('security_deposit')
+                if val not in ['', None]:
+                    tenant.billing_profile.security_deposit = float(val)
+            
+        db.session.commit()
+        return jsonify({
+            "message": "Successfully updated tenant",
+            "tenant": {
+                "id": tenant.id,
+                "name": tenant.name,
+                "agreement_url": tenant.agreement_url
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        # Return the actual error message so the user can see what failed
+        return jsonify({"error": f"Database Error: {str(e)}"}), 500
 
 @tenants_bp.route('/tenants/<int:id>', methods=['DELETE'])
 def delete_tenant(id):
