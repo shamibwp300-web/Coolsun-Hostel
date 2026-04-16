@@ -221,31 +221,37 @@ def add_internet_bill():
 @utilities_bp.route('/utilities/rooms-status', methods=['GET'])
 def rooms_utility_status():
     """Returns all rooms with their latest meter reading for easy grid viewing"""
-    rooms = Room.query.all()
-    result = []
-    for room in rooms:
-        last_reading = MeterReading.query.filter_by(room_id=room.id).order_by(MeterReading.reading_date.desc()).first()
-        last_water = WaterBill.query.filter_by(room_id=room.id).order_by(WaterBill.billing_date.desc()).first()
-        last_internet = InternetBill.query.filter_by(room_id=room.id).order_by(InternetBill.billing_date.desc()).first()
-        
-        # Calculate how many tenants in the room are opted in to the internet
-        internet_opt_in_count = len([t for t in room.get_active_tenants() if t.internet_opt_in])
-        
-        result.append({
-            "room_id": room.id,
-            "room_number": room.number,
-            "capacity": room.capacity,
-            "occupied_beds": len(room.get_active_tenants()),
-            "meter_number": room.meter_number,
-            "internet_opt_in_count": internet_opt_in_count,
-            "last_reading": last_reading.current_reading if (last_reading and last_reading.current_reading is not None) else 0,
-            "last_reading_date": last_reading.reading_date.strftime('%Y-%m-%d') if (last_reading and last_reading.reading_date) else None,
-            "last_unit_cost": float(last_reading.unit_cost or 0) if last_reading else 0.0,
-            "last_bill_amount": float(last_reading.total_bill or 0) if last_reading else 0.0,
-            "last_units_consumed": last_reading.units_consumed if (last_reading and last_reading.units_consumed is not None) else 0,
-            "last_water_bill_amount": float(last_water.amount or 0) if last_water else 0.0,
-            "last_water_bill_date": last_water.billing_date.strftime('%Y-%m-%d') if (last_water and last_water.billing_date) else None,
-            "last_internet_bill_amount": float(last_internet.amount or 0) if last_internet else 0.0,
-            "last_internet_bill_date": last_internet.billing_date.strftime('%Y-%m-%d') if (last_internet and last_internet.billing_date) else None
-        })
-    return jsonify(result), 200
+    try:
+        rooms = Room.query.filter_by(deleted_at=None).all()
+        result = []
+        for room in rooms:
+            last_reading = MeterReading.query.filter_by(room_id=room.id).order_by(MeterReading.reading_date.desc()).first()
+            last_water = WaterBill.query.filter_by(room_id=room.id).order_by(WaterBill.billing_date.desc()).first()
+            last_internet = InternetBill.query.filter_by(room_id=room.id).order_by(InternetBill.billing_date.desc()).first()
+            
+            # Calculate how many tenants in the room are opted in to the internet
+            active_tenants = room.get_active_tenants()
+            internet_opt_in_count = len([t for t in active_tenants if t.internet_opt_in])
+            
+            result.append({
+                "room_id": room.id,
+                "room_number": room.number,
+                "capacity": room.capacity,
+                "occupied_beds": len(active_tenants),
+                "meter_number": room.meter_number,
+                "internet_opt_in_count": internet_opt_in_count,
+                "last_reading": last_reading.current_reading if (last_reading and last_reading.current_reading is not None) else 0,
+                "last_reading_date": last_reading.reading_date.strftime('%Y-%m-%d') if (last_reading and last_reading.reading_date) else None,
+                "last_unit_cost": float(last_reading.unit_cost or 0) if last_reading else 0.0,
+                "last_bill_amount": float(last_reading.total_bill or 0) if last_reading else 0.0,
+                "last_units_consumed": last_reading.units_consumed if (last_reading and last_reading.units_consumed is not None) else 0,
+                "last_water_bill_amount": float(last_water.amount or 0) if last_water else 0.0,
+                "last_water_bill_date": last_water.billing_date.strftime('%Y-%m-%d') if (last_water and last_water.billing_date) else None,
+                "last_internet_bill_amount": float(last_internet.amount or 0) if last_internet else 0.0,
+                "last_internet_bill_date": last_internet.billing_date.strftime('%Y-%m-%d') if (last_internet and last_internet.billing_date) else None
+            })
+        return jsonify(result), 200
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": f"Internal Utility Error: {str(e)}"}), 500
