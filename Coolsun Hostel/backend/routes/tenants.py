@@ -101,7 +101,8 @@ def get_tenants():
             "tenancy_type": t.tenancy_type or 'Shared',
             "payment_method": next((l.payment_method for l in t.transactions if l.status == 'PAID' and l.payment_method), 'Cash'),
             "is_archived": t.deleted_at is not None,
-            "rent_start_date": t.agreement_start_date.strftime('%Y-%m-%d') if t.agreement_start_date else ""
+            "agreement_start_date": t.agreement_start_date.strftime('%Y-%m-%d') if t.agreement_start_date else "",
+            "actual_move_in_date": t.actual_move_in_date.strftime('%Y-%m-%d') if t.actual_move_in_date else ""
         })
     return jsonify(result), 200
 
@@ -129,13 +130,21 @@ def update_tenant(id):
         if bed_val is not None:
             tenant.bed_label = bed_val
         
-        if 'rent_start_date' in data and data.get('rent_start_date'):
+        # Handling Dates (Agreement Start and Move-in)
+        if 'agreement_start_date' in data and data.get('agreement_start_date'):
             try:
                 from datetime import datetime
-                tenant.agreement_start_date = datetime.strptime(data.get('rent_start_date'), '%Y-%m-%d').date()
+                tenant.agreement_start_date = datetime.strptime(data.get('agreement_start_date'), '%Y-%m-%d').date()
             except:
                 pass
         
+        if 'actual_move_in_date' in data and data.get('actual_move_in_date'):
+            try:
+                from datetime import datetime
+                tenant.actual_move_in_date = datetime.strptime(data.get('actual_move_in_date'), '%Y-%m-%d').date()
+            except:
+                pass
+
         if 'internet_opt_in' in data:
             val = data.get('internet_opt_in')
             tenant.internet_opt_in = str(val).lower() == 'true'

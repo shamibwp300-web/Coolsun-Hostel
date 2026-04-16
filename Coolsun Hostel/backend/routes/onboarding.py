@@ -40,12 +40,14 @@ def create_tenant():
             if active_floor_tenants >= floor.max_bulk_capacity:
                 return jsonify({"error": f"Floor capacity strictly enforced: max {floor.max_bulk_capacity} tenants reached."}), 409
 
-        # Date Parsing
-        try:
-            agreement_date = datetime.strptime(data.get('agreement_start_date'), '%Y-%m-%d').date()
-            move_in_date = datetime.strptime(data.get('actual_move_in_date'), '%Y-%m-%d').date()
-        except (ValueError, TypeError) as e:
-            return jsonify({"error": f"Invalid date format: {str(e)}"}), 400
+        # Date Parsing (Robust)
+        def parse_date(d_str):
+            if not d_str or d_str == 'null': return datetime.utcnow().date()
+            try: return datetime.strptime(d_str, '%Y-%m-%d').date()
+            except: return datetime.utcnow().date()
+
+        agreement_date = parse_date(data.get('agreement_start_date'))
+        move_in_date = parse_date(data.get('actual_move_in_date'))
             
         # Numeric Parsing
         try:

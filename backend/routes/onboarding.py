@@ -11,225 +11,182 @@ def create_tenant():
     data = request.form
     files = request.files
     
-    upload_folder = 'uploads'
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
-
-    saved_files = [] # Track files for rollback cleanup
+    # Track files for cleanup on rollback
+    saved_files = []
 
     try:
-        # ATOMIC TRANSACTION BLOCK
-        with db.session.begin_nested():
-            # 1. Check Ghost Slots (Optimistic Locking)
-            room_id = data.get('room_id')
-            room = Room.query.get(room_id)
-            if not room:
-                return jsonify({"error": "Room not found"}), 404
+        # --- 1. PRE-VALIDATION (BEFORE ANY DB CHANGES) ---
+        
+        # Room Check
+        room_id = data.get('room_id')
+        if not room_id:
+            return jsonify({"error": "Missing room_id"}), 400
             
-            active_tenants = len([t for t in room.tenants if getattr(t, 'deleted_at', None) is None])
-            if (room.capacity - active_tenants) <= 0:
-                return jsonify({"error": "No vacancies in this room"}), 409 # Conflict
+        room = Room.query.get(room_id)
+        if not room:
+            return jsonify({"error": f"Room {room_id} not found"}), 404
+        
+        # Capacity Check (Normal Room) - More robust direct count
+        active_tenants_count = Tenant.query.filter_by(room_id=room_id, deleted_at=None).count()
+        
+        if active_tenants_count >= room.capacity:
+            return jsonify({"error": f"Room {room.number} is already full ({active_tenants_count}/{room.capacity})"}), 409
 
-            # 2. Parse Dates
-            agreement_date = datetime.strptime(data.get('agreement_start_date'), '%Y-%m-%d').date()
-            move_in_date = datetime.strptime(data.get('actual_move_in_date'), '%Y-%m-%d').date()
+        # Bulk Floor Capacity Check (Floor Level)
+        floor = room.floor_ref
+        if floor and floor.is_bulk_rented:
+            floor_rooms = [r.id for r in floor.rooms if r.deleted_at is None]
+            active_floor_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count()
+            if active_floor_tenants >= floor.max_bulk_capacity:
+                return jsonify({"error": f"Floor capacity strictly enforced: max {floor.max_bulk_capacity} tenants reached."}), 409
+
+        # Date Parsing (Robust)
+        def parse_date(d_str):
+            if not d_str or d_str == 'null': return datetime.utcnow().date()
+            try: return datetime.strptime(d_str, '%Y-%m-%d').date()
+            except: return datetime.utcnow().date()
+
+        agreement_date = parse_date(data.get('agreement_start_date'))
+        move_in_date = parse_date(data.get('actual_move_in_date'))
             
-            # Form data parsing for booleans (FormData sends strings)
-            payment_method = data.get('payment_method', 'Cash')
-            internet_opt_in_str = data.get('internet_opt_in', 'true').lower()
-            internet_opt_in = internet_opt_in_str == 'true'
+        # Numeric Parsing
+        try:
+            raw_base_rent = data.get('base_rent') or data.get('rent_amount') or 0
+            base_rent = float(raw_base_rent)
             
-            parent_tenant_id = data.get('parent_tenant_id')
-            if parent_tenant_id in ['null', '', 'select', None]:
-                parent_tenant_id = None
-            else:
-                try:
-                    parent_tenant_id = int(parent_tenant_id)
-                except ValueError:
-                    parent_tenant_id = None
-
-            # 3. Create Tenant
-            tenancy_type = data.get('tenancy_type', 'Shared')
-            tenant = Tenant(
-                name=data.get('name'),
-                cnic=data.get('cnic'),
-                phone=data.get('phone'),
-                room_id=room_id,
-                bed_label=data.get('bed_label'),
-                police_status='Pending',
-                agreement_start_date=agreement_date,
-                actual_move_in_date=move_in_date,
-                is_partial_payment=data.get('is_partial_payment') == 'true',
-                internet_opt_in=internet_opt_in,
-                tenancy_type=tenancy_type,
-                emergency_contact=data.get('emergency_contact'),
-                parent_tenant_id=parent_tenant_id
-            )
-            db.session.add(tenant)
-            db.session.flush() # Get Tenant ID
-
-            # 4. Create Billing Profile
-            base_rent = float(data.get('base_rent') or data.get('rent_amount') or 0)
-            initial_rent = float(data.get('rent_amount', 0))
-            security_deposit_total = float(data.get('security_deposit') or 0)
+            raw_initial_rent = data.get('rent_amount') or 0
+            initial_rent = float(raw_initial_rent)
+            
+            raw_security = data.get('security_deposit') or 0
+            security_deposit_total = float(raw_security)
+            
             due_day = int(data.get('due_day', 1))
-
-            # ----- BULK FLOOR RENTING LOGIC -----
-            floor = room.floor_ref
-            if floor and floor.is_bulk_rented:
-                floor_rooms = [r.id for r in floor.rooms if r.deleted_at is None]
-                if floor_rooms:
-                    active_floor_tenants = Tenant.query.filter(Tenant.room_id.in_(floor_rooms), Tenant.deleted_at == None).count()
-                    if active_floor_tenants >= floor.max_bulk_capacity:
-                        return jsonify({"error": f"Floor capacity strictly enforced: max {floor.max_bulk_capacity} tenants allowed."}), 409
-                
-                # The sub-tenant on a bulk rented floor doesn't pay system rent
-                base_rent = 0.0
-                initial_rent = 0.0
-            # ------------------------------------
             
+            # Payment current amount
+            raw_paid = data.get('amount_paid_now')
+            amount_paid_now = float(raw_paid) if raw_paid and raw_paid != '' else (initial_rent + security_deposit_total)
+        except ValueError as e:
+            return jsonify({"error": f"Invalid numeric data: {str(e)}"}), 400
+
+        # --- 2. DB OPERATIONS (ATOMIC BLOCK) ---
+        
+        # Override rent for bulk floors
+        if floor and floor.is_bulk_rented:
+            base_rent = 0.0
+            initial_rent = 0.0
+
+        # Identify Parent Tenant
+        parent_id_raw = data.get('parent_tenant_id')
+        parent_tenant_id = None
+        if parent_id_raw and parent_id_raw not in ('null', '', 'select', 'bulk'):
+            try: parent_tenant_id = int(parent_id_raw)
+            except ValueError: pass
             
-            billing = BillingProfile(
-                tenant_id=tenant.id, 
-                rent_amount=base_rent, 
-                security_deposit=security_deposit_total,
-                pro_rata_rent=initial_rent,
-                due_day=due_day
-            )
-            db.session.add(billing)
+        # 🛡️ ROBUST BULK PARENTING
+        # If room is bulk rented, and we still don't have a parent, use the floor's bulk owner
+        if not parent_tenant_id and floor and floor.is_bulk_rented:
+            parent_tenant_id = floor.bulk_tenant_id
 
-            # 5. Financial Logic (Unified Billing & Security)
-            amount_paid_now_raw = data.get('amount_paid_now')
-            if amount_paid_now_raw is not None and str(amount_paid_now_raw).strip() != '':
-                amount_paid_now = float(amount_paid_now_raw)
-            else:
-                amount_paid_now = initial_rent + security_deposit_total
-            
-            ledger_rent_type = 'PRIVATE_RENT' if tenancy_type == 'Private' else 'RENT'
+        # Create Tenant
+        tenant = Tenant(
+            name=data.get('name'),
+            cnic=data.get('cnic'),
+            phone=data.get('phone'),
+            room_id=room_id,
+            bed_label=data.get('bed_label'),
+            police_status='Pending',
+            agreement_start_date=agreement_date,
+            actual_move_in_date=move_in_date,
+            is_partial_payment=data.get('is_partial_payment', 'false').lower() == 'true',
+            internet_opt_in=data.get('internet_opt_in', 'true').lower() == 'true',
+            tenancy_type=data.get('tenancy_type', 'Shared'),
+            emergency_contact=data.get('emergency_contact'),
+            parent_tenant_id=parent_tenant_id
+        )
+        db.session.add(tenant)
+        db.session.flush()
 
-            # Allocate payments: Rent first, then Security
-            amount_for_rent = min(amount_paid_now, initial_rent)
-            rent_pending = initial_rent - amount_for_rent
-            remaining_paid = amount_paid_now - amount_for_rent
+        # Billing Profile
+        billing = BillingProfile(
+            tenant_id=tenant.id, 
+            rent_amount=base_rent, 
+            security_deposit=security_deposit_total,
+            pro_rata_rent=initial_rent,
+            due_day=due_day
+        )
+        db.session.add(billing)
 
-            amount_for_security = min(remaining_paid, security_deposit_total)
-            security_pending = security_deposit_total - amount_for_security
-            remaining_paid -= amount_for_security
+        # Ledger Entries
+        ledger_rent_type = 'PRIVATE_RENT' if tenant.tenancy_type == 'Private' else 'RENT'
+        amount_for_rent = min(amount_paid_now, initial_rent)
+        rent_pending = initial_rent - amount_for_rent
+        remaining_paid = amount_paid_now - amount_for_rent
+        amount_for_security = min(remaining_paid, security_deposit_total)
+        security_pending = security_deposit_total - amount_for_security
 
-            # Rent Ledger Entries
-            if amount_for_rent > 0:
-                db.session.add(Ledger(tenant_id=tenant.id, amount=amount_for_rent, type=ledger_rent_type, status='PAID', payment_method=payment_method, description=f'Initial {tenancy_type} Rent (Paid)'))
-            if rent_pending > 0:
-                db.session.add(Ledger(tenant_id=tenant.id, amount=rent_pending, type=ledger_rent_type, status='PENDING', description=f'Initial {tenancy_type} Rent Arrears'))
+        p_method = data.get('payment_method', 'Cash')
+        if amount_for_rent > 0:
+            db.session.add(Ledger(tenant_id=tenant.id, amount=amount_for_rent, type=ledger_rent_type, status='PAID', payment_method=p_method, description=f'Initial {tenant.tenancy_type} Rent (Paid)'))
+        if rent_pending > 0:
+            db.session.add(Ledger(tenant_id=tenant.id, amount=rent_pending, type=ledger_rent_type, status='PENDING', description=f'Initial {tenant.tenancy_type} Rent Arrears'))
 
-            # Security Ledger Entries
-            if amount_for_security > 0:
-                db.session.add(Ledger(tenant_id=tenant.id, amount=amount_for_security, type='DEPOSIT', status='PAID', payment_method=payment_method, description='Security Deposit (Paid)'))
-            if security_pending > 0:
-                db.session.add(Ledger(tenant_id=tenant.id, amount=security_pending, type='DEPOSIT', status='PENDING', description='Security Deposit Arrears'))
-            
-            # Record any overpayment / pure advance (e.g., bulk tenant or manual extra payment)
-            if remaining_paid > 0:
-                db.session.add(Ledger(tenant_id=tenant.id, amount=remaining_paid, type='DEPOSIT', status='PAID', payment_method=payment_method, description='Initial Advance / Overpayment'))
+        # Security Responsibility Logic
+        security_managed_by = data.get('security_managed_by', 'Individual') # Default to Individual
 
-            financials = {
-                "rent": initial_rent,
-                "security": security_deposit_total,
-                "received": amount_paid_now,
-                "arrears": rent_pending + security_pending,
-                "advance": remaining_paid
-            }
+        if amount_for_security > 0:
+            db.session.add(Ledger(tenant_id=tenant.id, amount=amount_for_security, type='DEPOSIT', status='PAID', payment_method=p_method, description='Security Deposit (Paid)'))
+        
+        # Only create a PENDING security entry if it's managed individually
+        if security_pending > 0 and security_managed_by == 'Individual':
+            db.session.add(Ledger(tenant_id=tenant.id, amount=security_pending, type='DEPOSIT', status='PENDING', description='Security Deposit Arrears'))
+        elif security_managed_by == 'Primary':
+            # Optionally log that it's covered by primary, or just skip it
+            pass
 
-            # 6. Handle Files (Naming Convention: tenantID_docType_timestamp)
-            # Dedicated fields mapping
-            doc_mapping = {
-                'id_front': 'ID_Front',
-                'id_back': 'ID_Back',
-                'police_form': 'Police_Form',
-                'agreement': 'Agreement'
-            }
-            
-            # Attribute mapping on Tenant model
-            attr_mapping = {
-                'id_front': 'id_card_front_url',
-                'id_back': 'id_card_back_url',
-                'police_form': 'police_form_url',
-                'agreement': 'agreement_url'
-            }
-            
-            # Save file to the persistent upload directory
-            static_doc_dir = current_app.config['UPLOAD_FOLDER']
-            os.makedirs(static_doc_dir, exist_ok=True)
+        # File Attachments
+        doc_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'documents')
+        if not os.path.exists(doc_dir):
+            os.makedirs(doc_dir)
 
-            if 'police_form' not in files:
-                tenant.compliance_alert = True
-                tenant.police_form_submitted = None
-            else:
-                tenant.police_form_submitted = datetime.utcnow()
+        doc_mapping = {'id_front': 'ID_Front', 'id_back': 'ID_Back', 'police_form': 'Police_Form', 'agreement': 'Agreement'}
+        attr_mapping = {'id_front': 'id_card_front_url', 'id_back': 'id_card_back_url', 'police_form': 'police_form_url', 'agreement': 'agreement_url'}
 
-            for doc_field, enum_type in doc_mapping.items():
-                target_attr = attr_mapping[doc_field]
-                if doc_field in files:
-                    file = files[doc_field]
-                    if file.filename == '':
-                        continue
+        for field, doc_type in doc_mapping.items():
+            if field in files:
+                file = files[field]
+                if file and file.filename != '':
+                    ts = int(datetime.now().timestamp())
+                    ext = os.path.splitext(file.filename)[1]
+                    fname = f"tenant_{tenant.id}_{field}_{ts}{ext}"
+                    fpath = os.path.join(doc_dir, fname)
+                    file.save(fpath)
+                    saved_files.append(fpath)
                     
-                    timestamp = int(datetime.now().timestamp())
-                    filename = f"tenant_{tenant.id}_{doc_field}_{timestamp}{os.path.splitext(file.filename)[1]}"
-                    file_path = os.path.join(static_doc_dir, filename)
+                    db_url = f"/static/uploads/documents/{fname}"
+                    db.session.add(Document(tenant_id=tenant.id, type=doc_type, url=db_url))
                     
-                    # URL for frontend access
-                    db_url = f"/api/docs/{filename}"
-                    
-                    # Save File
-                    file.save(file_path)
-                    saved_files.append(file_path)
-                    
-                    # 1. Update direct field on Tenant
-                    setattr(tenant, target_attr, db_url)
-                    
-                    # 2. Maintain Document table record (using capitalized Enum)
-                    doc = Document(tenant_id=tenant.id, type=enum_type, url=db_url)
-                    db.session.add(doc)
-            
-            # Also handle the 'agreement' which isn't one of the 3 dedicated but still in files
-            if 'agreement' in files:
-                file = files['agreement']
-                if file.filename != '':
-                    timestamp = int(datetime.now().timestamp())
-                    filename = f"tenant_{tenant.id}_agreement_{timestamp}{os.path.splitext(file.filename)[1]}"
-                    file_path = os.path.join(static_doc_dir, filename)
-                    
-                    # URL for frontend access
-                    db_url = f"/api/docs/{filename}"
-                    
-                    # Save File
-                    file.save(file_path)
-                    saved_files.append(file_path)
-                    
-                    # 1. Update direct field on Tenant
-                    tenant.agreement_url = db_url
-                    
-                    # 2. Maintain Document table record
-                    doc = Document(tenant_id=tenant.id, type='Agreement', url=db_url)
-                    db.session.add(doc)
+                    if field in attr_mapping:
+                        setattr(tenant, attr_mapping[field], db_url)
+                    if field == 'agreement':
+                        tenant.agreement_url = db_url
+                    if field == 'police_form':
+                        tenant.police_form_submitted = datetime.utcnow()
 
-        # Commit only if everything succeeded
+        if not tenant.police_form_submitted:
+            tenant.compliance_alert = True
+
+        # COMMIT
         db.session.commit()
-        return jsonify({
-            "message": "Tenant onboarded successfully", 
-            "id": tenant.id, 
-            "financials": financials,
-            "compliance": tenant.get_compliance_status()
-        }), 201
+        return jsonify({"message": "Onboarded", "id": tenant.id, "compliance": tenant.get_compliance_status()}), 201
 
     except Exception as e:
         db.session.rollback()
-        # Clean up files (Zombie Prevention)
         for fpath in saved_files:
             if os.path.exists(fpath):
-                try:
-                    os.remove(fpath)
-                except OSError:
-                    pass # Log error in production
-        return jsonify({"error": str(e)}), 500
+                try: os.remove(fpath)
+                except: pass
+        return jsonify({"error": f"System Error: {str(e)}"}), 500
+    finally:
+        # Extra safety: ensure session is cleaned
+        db.session.remove()
+
