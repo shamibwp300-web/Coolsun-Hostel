@@ -18,10 +18,12 @@ const Electricity = () => {
         try {
             const res = await axios.get('/api/utilities/rooms-status');
             setRoomsStatus(res.data);
+            setError(null);
             setLoading(false);
         } catch (err) {
             console.error("Failed to fetch utilities status", err);
-            setError("Could not load electricity data.");
+            const msg = err.response?.data?.error || "Could not load electricity data.";
+            setError(msg);
             setLoading(false);
         }
     };

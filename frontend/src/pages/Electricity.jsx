@@ -10,37 +10,22 @@ const Electricity = () => {
     const [loggingWaterForRoom, setLoggingWaterForRoom] = useState(null); // Water
     const [loggingWifiForRoom, setLoggingWifiForRoom] = useState(null); // Internet
     const [newReading, setNewReading] = useState({ current_reading: '', previous_reading: '', unit_cost: 0, meter_number: '' });
-    const [globalUnitCost, setGlobalUnitCost] = useState(45.0);
-    const [isUpdatingGlobal, setIsUpdatingGlobal] = useState(false);
     const [newWaterBill, setNewWaterBill] = useState({ amount: '' });
     const [newWifiBill, setNewWifiBill] = useState({ amount: '' });
     const [error, setError] = useState(null);
 
     const fetchStatus = async () => {
         try {
-            const [statusRes, costRes] = await Promise.all([
-                axios.get('/api/utilities/rooms-status'),
-                axios.get('/api/utilities/global-cost')
-            ]);
-            setRoomsStatus(statusRes.data);
-            setGlobalUnitCost(costRes.data.unit_cost);
+            const res = await axios.get('/api/utilities/rooms-status');
+            setRoomsStatus(res.data);
+            setError(null);
             setLoading(false);
         } catch (err) {
             console.error("Failed to fetch utilities status", err);
-            setError("Could not load electricity data.");
+            const msg = err.response?.data?.error || "Could not load electricity data.";
+            setError(msg);
             setLoading(false);
         }
-    };
-    
-    const handleUpdateGlobalCost = async () => {
-        setIsUpdatingGlobal(true);
-        try {
-            await axios.post('/api/utilities/global-cost', { unit_cost: globalUnitCost });
-            alert("Global Unit Cost updated successfully! This will apply by default to all new readings.");
-        } catch (err) {
-            alert("Failed to update global cost.");
-        }
-        setIsUpdatingGlobal(false);
     };
 
     useEffect(() => {
@@ -52,7 +37,7 @@ const Electricity = () => {
         setNewReading({
             current_reading: '',
             previous_reading: room.last_reading,
-            unit_cost: room.last_unit_cost || globalUnitCost,
+            unit_cost: room.last_unit_cost > 0 ? room.last_unit_cost : 45.0,
             meter_number: room.meter_number || ''
         });
     };
@@ -116,34 +101,13 @@ const Electricity = () => {
 
     return (
         <div className="space-y-8 p-4 md:p-0">
-            <header className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4">
+            <header className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-white tracking-tight flex items-center">
                         <Zap className="mr-3 text-yellow-400" size={32} />
                         Utilities & Billing
                     </h1>
                     <p className="text-white/40 text-sm mt-1">Manage electricity readings and water bills</p>
-                </div>
-                
-                {/* Global Unit Cost Setting */}
-                <div className="glass-card bg-yellow-500/10 border-yellow-500/20 px-4 py-2 flex items-center gap-3">
-                    <label className="text-xs text-yellow-400 font-bold uppercase tracking-wider">
-                        Default Per Unit (Rs)
-                    </label>
-                    <input 
-                        type="number" 
-                        step="0.1"
-                        value={globalUnitCost}
-                        onChange={(e) => setGlobalUnitCost(e.target.value)}
-                        className="bg-black/40 text-white px-2 py-1 rounded w-20 text-center font-mono text-sm border border-white/10"
-                    />
-                    <button 
-                        onClick={handleUpdateGlobalCost}
-                        disabled={isUpdatingGlobal}
-                        className="bg-yellow-500 hover:bg-yellow-400 text-black px-3 py-1 rounded text-xs font-bold transition-all disabled:opacity-50"
-                    >
-                        {isUpdatingGlobal ? 'Saving...' : 'Set Global'}
-                    </button>
                 </div>
             </header>
 
@@ -370,10 +334,7 @@ const Electricity = () => {
                                 </div>
 
                                 <div>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-[10px] text-white/40 uppercase tracking-widest block font-bold">Per Unit Cost (Rs)</label>
-                                        <span className="text-[9px] text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded">*Editable per room</span>
-                                    </div>
+                                    <label className="text-[10px] text-white/40 uppercase tracking-widest mb-2 block font-bold">Per Unit Cost (Rs)</label>
                                     <input
                                         required
                                         type="number"
@@ -385,7 +346,7 @@ const Electricity = () => {
                                 </div>
 
                                 {/* Dynamic Real-time Calculation */}
-                                 {newReading.current_reading > parseFloat(newReading.previous_reading || 0) && newReading.unit_cost > 0 && (
+                                {newReading.current_reading > parseFloat(newReading.previous_reading || 0) && newReading.unit_cost > 0 && (
                                     <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                                         <div className="flex justify-between text-xs text-white/60 mb-1">
                                             <span>Units Consumed</span>
