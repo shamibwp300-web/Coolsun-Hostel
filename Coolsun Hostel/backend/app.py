@@ -64,6 +64,10 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
     
+    # 🛰️ UPLOAD CONFIGURATION
+    app.config['UPLOAD_FOLDER'] = os.path.join(_BASE_DIR, 'backend', 'static', 'uploads', 'documents')
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    
     # 🛰️ EMERGENCY SCHEMA REPAIR FUNCTION
     def repair_schema(engine):
         from sqlalchemy import text, inspect
@@ -206,6 +210,11 @@ def create_app():
     def ping():
         db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
         return jsonify({"status": "Online", "database": db_type}), 200
+
+    # ─── Document Serving Route ────────────────────────────────────────────────
+    @app.route('/api/docs/<path:filename>')
+    def serve_docs(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # ─── SPA Fallback Route ─────────────────────────────────────────────────────
     @app.route('/', defaults={'path': ''})
