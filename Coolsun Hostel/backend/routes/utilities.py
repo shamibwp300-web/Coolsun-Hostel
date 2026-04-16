@@ -238,14 +238,14 @@ def rooms_utility_status():
             "occupied_beds": len(room.get_active_tenants()),
             "meter_number": room.meter_number,
             "internet_opt_in_count": internet_opt_in_count,
-            "last_reading": last_reading.current_reading if last_reading else 0,
-            "last_reading_date": last_reading.reading_date.strftime('%Y-%m-%d') if last_reading else None,
-            "last_unit_cost": float(last_reading.unit_cost) if last_reading else 0.0,
-            "last_bill_amount": float(last_reading.total_bill) if last_reading else 0.0,
-            "last_units_consumed": last_reading.units_consumed if last_reading else 0,
-            "last_water_bill_amount": float(last_water.amount) if last_water else 0.0,
-            "last_water_bill_date": last_water.billing_date.strftime('%Y-%m-%d') if last_water else None,
-            "last_internet_bill_amount": float(last_internet.amount) if last_internet else 0.0,
-            "last_internet_bill_date": last_internet.billing_date.strftime('%Y-%m-%d') if last_internet else None
+            "last_reading": last_reading.current_reading if (last_reading and last_reading.current_reading is not None) else 0,
+            "last_reading_date": last_reading.reading_date.strftime('%Y-%m-%d') if (last_reading and last_reading.reading_date) else None,
+            "last_unit_cost": float(last_reading.unit_cost or 0) if last_reading else 0.0,
+            "last_bill_amount": float(last_reading.total_bill or 0) if last_reading else 0.0,
+            "last_units_consumed": last_reading.units_consumed if (last_reading and last_reading.units_consumed is not None) else 0,
+            "last_water_bill_amount": float(last_water.amount or 0) if last_water else 0.0,
+            "last_water_bill_date": last_water.billing_date.strftime('%Y-%m-%d') if (last_water and last_water.billing_date) else None,
+            "last_internet_bill_amount": float(last_internet.amount or 0) if last_internet else 0.0,
+            "last_internet_bill_date": last_internet.billing_date.strftime('%Y-%m-%d') if (last_internet and last_internet.billing_date) else None
         })
     return jsonify(result), 200
