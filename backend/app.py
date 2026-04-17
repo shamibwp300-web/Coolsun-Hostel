@@ -146,7 +146,7 @@ def create_app():
             from backend.models import User
             if not User.query.filter_by(username='admin').first():
                 u = User(username='admin', role='Owner')
-                u.set_password('admin123')
+                u.set_password('Coolsun@23*+')
                 db.session.add(u)
                 
             if not User.query.filter_by(username='ewardjain@gmail.com').first():

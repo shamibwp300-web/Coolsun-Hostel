@@ -34,13 +34,27 @@ def login():
     session['username'] = user.username
     session['role'] = user.role
 
+    # Derive permissions from role (User model has no permissions field)
+    role = user.role or 'Admin'
+    all_access = {
+        "finance": True, "tenants": True, "rooms": True,
+        "utilities": True, "reports": True, "settings": True,
+        "tasks": True, "police": True, "users": True
+    }
+    if role == 'Owner':
+        permissions = all_access
+    elif role == 'Manager':
+        permissions = {**all_access, "users": False, "settings": False}
+    else:  # Admin / Staff
+        permissions = {**all_access, "users": False, "settings": False, "finance": False}
+
     return jsonify({
         "message": "Login successful",
         "user": {
             "id": user.id,
             "username": user.username,
-            "role": user.role,
-            "permissions": user.permissions
+            "role": role,
+            "permissions": permissions
         }
     }), 200
 
