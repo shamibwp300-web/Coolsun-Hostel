@@ -85,6 +85,23 @@ def pay_dues():
     db.session.commit()
     return jsonify({"message": "Payment logged successfully"}), 200
 
+@finance_bp.route('/finance/data-repair', methods=['POST'])
+def data_repair():
+    from backend.models import Tenant, Ledger
+    # Find all sub-tenants (tenants with a parent_tenant_id)
+    sub_tenants = Tenant.query.filter(Tenant.parent_tenant_id.isnot(None), Tenant.deleted_at.is_(None)).all()
+    
+    entries_voided = 0
+    for st in sub_tenants:
+        # Void all pending ledgers (or all ledgers) for sub-tenants to clear their balances
+        ledgers = Ledger.query.filter_by(tenant_id=st.id, deleted_at=None).all()
+        for l in ledgers:
+            l.deleted_at = datetime.utcnow()
+            entries_voided += 1
+            
+    db.session.commit()
+    return jsonify({"entries_voided": entries_voided, "message": "Sub-tenant balances zeroed out"}), 200
+
 @finance_bp.route('/finance/expenses', methods=['GET', 'POST'])
 def handle_expenses():
     if request.method == 'POST':
