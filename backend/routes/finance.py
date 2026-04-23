@@ -201,35 +201,53 @@ def generate_bulk_rent():
     generated = 0
     
     # 1. Generate Rent for Bulk Rented Floors
-    if not room_id:
+    bulk_floors = []
+    if room_id:
+        room_obj = Room.query.get(room_id)
+        if room_obj and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
+            bulk_floors.append(room_obj.floor_ref)
+    else:
         bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
-        for f in bulk_floors:
-            if not f.bulk_tenant_id:
-                continue
-                
-            floor_description = f"Floor Rent ({f.name}) for {month_label}"
+
+    for f in bulk_floors:
+        if not f.bulk_tenant_id:
+            continue
             
-            existing = Ledger.query.filter_by(
-                tenant_id=f.bulk_tenant_id, 
-                type='RENT', 
-                deleted_at=None
-            ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
+        floor_description = f"Floor Rent ({f.name}) for {month_label}"
+        target_date = datetime(year, month, 1, 12, 0)
+        
+        existing = Ledger.query.filter_by(
+            tenant_id=f.bulk_tenant_id, 
+            type='RENT', 
+            deleted_at=None
+        ).filter(Ledger.description.contains(f"Floor Rent ({f.name})")).all()
+        
+        already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
+        
+        if not already_billed:
+            l = Ledger(
+                tenant_id=f.bulk_tenant_id,
+                amount=f.bulk_rent_amount or 0,
+                type='RENT',
+                status='PENDING',
+                description=floor_description,
+                timestamp=target_date
+            )
+            db.session.add(l)
+            generated += 1
             
-            already_billed = any(e.timestamp.strftime('%Y-%m') == current_month_str for e in existing)
-            
-            if not already_billed:
-                # Use the first day of the target month as the timestamp for billing cycle tracking
-                target_date = datetime(year, month, 1, 12, 0)
-                l = Ledger(
-                    tenant_id=f.bulk_tenant_id,
-                    amount=f.bulk_rent_amount or 0,
-                    type='RENT',
-                    status='PENDING',
-                    description=floor_description,
-                    timestamp=target_date
-                )
-                db.session.add(l)
-                generated += 1
+        # Generate Security Deposit for Bulk Floor if not exists
+        has_security = Ledger.query.filter_by(tenant_id=f.bulk_tenant_id, type='DEPOSIT', deleted_at=None).first()
+        if not has_security and f.bulk_security_deposit and f.bulk_security_deposit > 0:
+            db.session.add(Ledger(
+                tenant_id=f.bulk_tenant_id,
+                amount=f.bulk_security_deposit,
+                type='DEPOSIT',
+                status='PENDING',
+                description=f"Security Deposit (Bulk Floor {f.name})",
+                timestamp=target_date
+            ))
+            generated += 1
 
     # 2. Generate Rent for Regular Tenants
     if room_id:
@@ -241,7 +259,12 @@ def generate_bulk_rent():
         if not t.room:
             continue
             
-        if not room_id and t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
+        # Completely skip sub-tenants
+        if t.parent_tenant_id:
+            continue
+            
+        # Skip individual generation for any room inside a bulk-rented floor
+        if t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
             continue
             
         # --- Auto-Security Generation (Catch-up) ---
