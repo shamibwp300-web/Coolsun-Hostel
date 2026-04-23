@@ -201,7 +201,7 @@ def generate_bulk_rent():
     bulk_floors = []
     if room_id:
         room_obj = Room.query.get(room_id)
-        if room_obj and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
+        if room_obj and room_obj.is_bulk_rented and room_obj.floor_ref and room_obj.floor_ref.is_bulk_rented:
             bulk_floors.append(room_obj.floor_ref)
     else:
         bulk_floors = Floor.query.filter_by(is_bulk_rented=True, deleted_at=None).all()
@@ -260,8 +260,8 @@ def generate_bulk_rent():
         if t.parent_tenant_id:
             continue
             
-        # Skip individual generation for any room inside a bulk-rented floor
-        if t.room.floor_ref and t.room.floor_ref.is_bulk_rented:
+        # Skip individual generation ONLY if the ROOM itself is marked as bulk rented
+        if t.room.is_bulk_rented:
             continue
             
         # --- Auto-Security Generation (Catch-up) ---
