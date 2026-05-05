@@ -212,7 +212,7 @@ def create_app():
     @app.route('/api/debug/ping')
     def ping():
         db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
-        return jsonify({"status": "Online", "database": db_type}), 200
+        return jsonify({"status": "Online", "database": db_type, "version": "1.0.5-DOC-FIX"}), 200
 
     @app.route('/api/debug/list-uploads')
     def list_uploads():
