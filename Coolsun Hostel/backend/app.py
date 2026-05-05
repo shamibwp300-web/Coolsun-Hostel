@@ -65,7 +65,10 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
     
     # 🛰️ UPLOAD CONFIGURATION
-    app.config['UPLOAD_FOLDER'] = os.path.join(_BASE_DIR, 'backend', 'static', 'uploads', 'documents')
+    if os.path.exists('/app'):
+        app.config['UPLOAD_FOLDER'] = '/app/uploads/documents'
+    else:
+        app.config['UPLOAD_FOLDER'] = os.path.join(_BASE_DIR, 'backend', 'static', 'uploads', 'documents')
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
     # 🛰️ EMERGENCY SCHEMA REPAIR FUNCTION

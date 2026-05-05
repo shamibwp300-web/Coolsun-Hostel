@@ -144,7 +144,7 @@ def create_tenant():
             pass
 
         # File Attachments
-        doc_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'documents')
+        doc_dir = current_app.config['UPLOAD_FOLDER']
         if not os.path.exists(doc_dir):
             os.makedirs(doc_dir)
 
