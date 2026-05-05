@@ -65,7 +65,10 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_123')
     
     # 🛰️ UPLOAD CONFIGURATION
-    app.config['UPLOAD_FOLDER'] = os.path.join(_BASE_DIR, 'backend', 'static', 'uploads', 'documents')
+    if os.path.exists('/app'):
+        app.config['UPLOAD_FOLDER'] = '/app/uploads/documents'
+    else:
+        app.config['UPLOAD_FOLDER'] = os.path.join(_BASE_DIR, 'backend', 'static', 'uploads', 'documents')
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
     # 🛰️ EMERGENCY SCHEMA REPAIR FUNCTION
@@ -209,11 +212,24 @@ def create_app():
     @app.route('/api/debug/ping')
     def ping():
         db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
-        return jsonify({"status": "Online", "database": db_type}), 200
+        return jsonify({"status": "Online", "database": db_type, "version": "1.0.5-DOC-FIX"}), 200
+
+    @app.route('/api/debug/list-uploads')
+    def list_uploads():
+        import os
+        folder = app.config['UPLOAD_FOLDER']
+        files = []
+        if os.path.exists(folder):
+            files = os.listdir(folder)
+        return jsonify({"folder": folder, "files": files, "exists": os.path.exists(folder)}), 200
 
     # ─── Document Serving Route ────────────────────────────────────────────────
     @app.route('/api/docs/<path:filename>')
     def serve_docs(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+    @app.route('/static/uploads/documents/<path:filename>')
+    def serve_legacy_docs(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # ─── SPA Fallback Route ─────────────────────────────────────────────────────
