@@ -106,7 +106,7 @@ def upload_police_form(tenant_id):
         try:
             file.save(file_path)
             # URL to access from frontend
-            file_url = f"/static/{UPLOAD_FOLDER}/{filename}"
+            file_url = f"/api/docs/{filename}"
             
             # Deactivate previous docs of same type
             old_docs = Document.query.filter_by(tenant_id=tenant_id, type=doc_type, deleted_at=None).all()

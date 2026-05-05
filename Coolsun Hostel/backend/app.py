@@ -216,6 +216,10 @@ def create_app():
     def serve_docs(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+    @app.route('/static/uploads/documents/<path:filename>')
+    def serve_legacy_docs(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
     # ─── SPA Fallback Route ─────────────────────────────────────────────────────
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')

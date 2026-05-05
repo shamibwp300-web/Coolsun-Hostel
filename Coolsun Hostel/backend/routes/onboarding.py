@@ -162,7 +162,7 @@ def create_tenant():
                     file.save(fpath)
                     saved_files.append(fpath)
                     
-                    db_url = f"/static/uploads/documents/{fname}"
+                    db_url = f"/api/docs/{fname}"
                     db.session.add(Document(tenant_id=tenant.id, type=doc_type, url=db_url))
                     
                     if field in attr_mapping:
