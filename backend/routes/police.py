@@ -14,25 +14,17 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def fix_doc_url(url):
-    if not url: return None
-    # Ensure it uses the new /api/docs path for reliability
-    # Matches /uploads/documents/, static/uploads/documents/, or /static/uploads/documents/
-    if 'documents/' in url:
-        filename = url.split('/')[-1]
-        return f"/api/docs/{filename}"
-    return url
-
 @police_bp.route('/police/records', methods=['GET'])
 def get_police_records():
     tenants = Tenant.query.all()
     result = []
     
     for t in tenants:
-        police_doc = Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).order_by(Document.id.desc()).first()
-        id_front = Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).order_by(Document.id.desc()).first()
-        id_back = Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).order_by(Document.id.desc()).first()
-        agreement = Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).order_by(Document.id.desc()).first()
+        # Related documents
+        police_doc = Document.query.filter_by(tenant_id=t.id, type='Police_Form', deleted_at=None).first()
+        id_front = Document.query.filter_by(tenant_id=t.id, type='ID_Front', deleted_at=None).first()
+        id_back = Document.query.filter_by(tenant_id=t.id, type='ID_Back', deleted_at=None).first()
+        agreement = Document.query.filter_by(tenant_id=t.id, type='Agreement', deleted_at=None).first()
         
         result.append({
             "id": t.id,
@@ -44,16 +36,11 @@ def get_police_records():
             "father_name": t.father_name,
             "permanent_address": t.permanent_address,
             "police_station": t.police_station,
-            "document_url": fix_doc_url(police_doc.url) if police_doc else fix_doc_url(t.police_form_url),
-            "document_id": police_doc.id if police_doc else None,
-            "police_form_url": fix_doc_url(police_doc.url) if police_doc else fix_doc_url(t.police_form_url),
-            "police_form_id": police_doc.id if police_doc else None,
-            "id_card_front_url": fix_doc_url(id_front.url) if id_front else fix_doc_url(t.id_card_front_url),
-            "id_card_front_id": id_front.id if id_front else None,
-            "id_card_back_url": fix_doc_url(id_back.url) if id_back else fix_doc_url(t.id_card_back_url),
-            "id_card_back_id": id_back.id if id_back else None,
-            "agreement_url": fix_doc_url(agreement.url) if agreement else None,
-            "agreement_id": agreement.id if agreement else None,
+            "document_url": t.police_form_url,
+            "police_form_url": t.police_form_url,
+            "id_card_front_url": t.id_card_front_url,
+            "id_card_back_url": t.id_card_back_url,
+            "agreement_url": getattr(t, 'agreement_url', None) or (agreement.url if agreement else None),
             "submitted_at": t.police_form_submitted.isoformat() if t.police_form_submitted else None
         })
         
@@ -106,7 +93,7 @@ def upload_police_form(tenant_id):
         return jsonify({"error": "Invalid document type"}), 400
         
     if file and allowed_file(file.filename):
-        # Save file to the persistent upload directory
+        # Create base upload dir dynamically
         base_dir = current_app.config['UPLOAD_FOLDER']
         os.makedirs(base_dir, exist_ok=True)
         
@@ -133,10 +120,9 @@ def upload_police_form(tenant_id):
             )
             db.session.add(new_doc)
             
-            # Update the direct URL field on the Tenant if applicable
+            # Update the direct URL field on the Tenant
             attr_name = valid_types[doc_type]
-            if attr_name:
-                setattr(tenant, attr_name, file_url)
+            setattr(tenant, attr_name, file_url)
             
             if doc_type == 'Police_Form':
                 tenant.police_status = 'Submitted'
@@ -170,6 +156,9 @@ def delete_police_form(document_id):
             tenant.id_card_front_url = None
         elif doc_type == 'ID_Back':
             tenant.id_card_back_url = None
+        elif doc_type == 'Agreement':
+            if hasattr(tenant, 'agreement_url'):
+                tenant.agreement_url = None
         elif doc_type == 'Police_Form':
             # Check if there are any other active police forms
             active_forms = Document.query.filter_by(tenant_id=tenant.id, type='Police_Form', deleted_at=None).count()
