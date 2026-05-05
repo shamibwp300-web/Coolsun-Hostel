@@ -214,6 +214,15 @@ def create_app():
         db_type = "Supabase (Cloud)" if "supabase" in app.config['SQLALCHEMY_DATABASE_URI'] else "SQLite (Local)"
         return jsonify({"status": "Online", "database": db_type}), 200
 
+    @app.route('/api/debug/list-uploads')
+    def list_uploads():
+        import os
+        folder = app.config['UPLOAD_FOLDER']
+        files = []
+        if os.path.exists(folder):
+            files = os.listdir(folder)
+        return jsonify({"folder": folder, "files": files, "exists": os.path.exists(folder)}), 200
+
     # ─── Document Serving Route ────────────────────────────────────────────────
     @app.route('/api/docs/<path:filename>')
     def serve_docs(filename):
